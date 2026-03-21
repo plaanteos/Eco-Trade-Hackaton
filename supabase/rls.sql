@@ -17,29 +17,39 @@
 -- ──────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION public.get_user_role()
 RETURNS TEXT
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT role
-  FROM public.profiles
-  WHERE id = auth.uid()
-  LIMIT 1;
+  DECLARE
+    v_role TEXT;
+  BEGIN
+    SELECT role INTO v_role
+    FROM public.profiles
+    WHERE id = auth.uid()
+    LIMIT 1;
+    RETURN v_role;
+  END;
 $$;
 
 -- Alias booleano de conveniencia (más legible en políticas)
 CREATE OR REPLACE FUNCTION public.is_operator()
 RETURNS BOOLEAN
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE id = auth.uid() AND role = 'Operador'
-  );
+  DECLARE
+    v_exists BOOLEAN;
+  BEGIN
+    SELECT EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE id = auth.uid() AND role = 'Operador'
+    ) INTO v_exists;
+    RETURN coalesce(v_exists, false);
+  END;
 $$;
 
 
