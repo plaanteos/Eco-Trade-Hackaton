@@ -1,0 +1,113 @@
+/* Editorial-specific styles for EcoTrade */
+
+/* Smooth transitions for interactive elements */
+.editorial-transition {
+  transition: all 0.2s ease-in-out;
+}
+
+/* Custom selection color */
+::selection {
+  background-color: #E8F4E3;
+  color: #2D5016;
+}
+
+/* Custom scrollbar for webkit browsers */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F5F3ED;
+  border-left: 1px solid #1A1A1A;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #4A4A4A;
+  border: 2px solid #F5F3ED;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #1A1A1A;
+}
+
+/* Print styles for tickets */
+@media print {
+  body {
+    background: white;
+  }
+  
+  header, footer, nav {
+    display: none !important;
+  }
+  
+  .ticket {
+    page-break-inside: avoid;
+    border: 2px solid #1A1A1A !important;
+  }
+}
+
+/* Focus styles for accessibility */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #2D5016;
+  outline-offset: 2px;
+}
+
+/* Animated underline for links */
+a.editorial-link {
+  position: relative;
+  text-decoration: none;
+}
+
+a.editorial-link::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background-color: #2D5016;
+  transition: width 0.3s ease;
+}
+
+a.editorial-link:hover::after {
+  width: 100%;
+}
+
+/* Ink stamp rotation animation */
+@keyframes stamp-drop {
+  0% {
+    transform: rotate(-3deg) translateY(-20px);
+    opacity: 0;
+  }
+  50% {
+    transform: rotate(-5deg) translateY(2px);
+  }
+  100% {
+    transform: rotate(-3deg) translateY(0);
+    opacity: 1;
+  }
+}
+
+.stamp-animate {
+  animation: stamp-drop 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+/* Fade in animation for page content */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-fade-in {
+  animation: fade-in 0.4s ease-out;
+}
