@@ -9,7 +9,7 @@ import { TrustScore } from '../components/editorial/TrustScore';
 import { EvidenceHash } from '../components/editorial/EvidenceHash';
 import { CarbonImpactBadge } from '../components/editorial/CarbonImpactBadge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
-import { MapPin, Calendar, Clock, Package, Download, XCircle, Edit, RefreshCw, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
+import { MapPin, Calendar, Clock, Package, Download, XCircle, RefreshCw, Loader2, ExternalLink } from 'lucide-react';
 import { getSessionById, cancelSession as apiCancelSession } from '@/lib/sessions';
 import { RecyclingSession } from '@/app/types';
 import { useAuth } from '../context/AuthContext';
@@ -60,7 +60,6 @@ const SessionDetail: React.FC = () => {
     );
   }
 
-  const canEdit = session.status === 'Borrador' || session.status === 'Programada';
   const canCancel = session.status === 'Borrador' || session.status === 'Programada';
 
   const handleCancel = async () => {
@@ -90,9 +89,9 @@ const SessionDetail: React.FC = () => {
           </div>
           <div className="flex gap-3">
             {session.status === 'Completada' && (
-              <EditorialButton variant="outline" size="md">
+              <EditorialButton variant="outline" size="md" onClick={() => window.print()}>
                 <Download className="w-4 h-4 mr-2" />
-                Recibo
+                Imprimir Recibo
               </EditorialButton>
             )}
             {canCancel && (
@@ -246,6 +245,28 @@ const SessionDetail: React.FC = () => {
                   />
                 </div>
               )}
+
+              {/* Botones de Acción para recibo */}
+              <div className="mt-8 flex flex-col md:flex-row gap-4">
+                <EditorialButton 
+                  variant="primary" 
+                  size="lg"
+                  className="flex-1 flex items-center justify-center gap-2"
+                  onClick={() => window.open(session.solanaReceipt?.explorerUrl, '_blank')}
+                >
+                  <ExternalLink className="w-5 h-5 text-white" />
+                  Ver Petición On-Chain
+                </EditorialButton>
+                <EditorialButton 
+                  variant="outline" 
+                  size="lg"
+                  className="flex-1 flex items-center justify-center gap-2"
+                  onClick={() => window.print()}
+                >
+                  <Download className="w-5 h-5" />
+                  Descargar Recibo (PDF)
+                </EditorialButton>
+              </div>
 
               {/* QR for public verification */}
               <div className="bg-white border-2 border-[#1A1A1A] p-6">

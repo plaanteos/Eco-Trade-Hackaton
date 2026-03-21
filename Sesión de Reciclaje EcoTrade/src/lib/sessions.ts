@@ -493,7 +493,7 @@ export async function createSession(data: CreateSessionInput): Promise<Recycling
     .insert({
       user_id: user.id,
       collection_point_id: data.collectionPointId,
-      status: "Borrador",
+      status: "Pendiente de verificación",
       scheduled_date: data.scheduledDate ?? null,
       scheduled_time: data.scheduledTime ?? null,
       total_kg: totalKg,
@@ -554,7 +554,7 @@ export async function createSession(data: CreateSessionInput): Promise<Recycling
     .eq("id", sessionId);
 
   // ── 7. Insertar entrada inicial en timeline ───────────────
-  await insertTimeline(sessionId, "Borrador", "Usuario");
+  await insertTimeline(sessionId, "Pendiente de verificación", "Usuario");
 
   // ── 8. Retornar sesión completa ───────────────────────────
   const session = await getSessionById(sessionId);

@@ -158,6 +158,7 @@ const SessionSuccess: React.FC = () => {
           variant="outline"
           size="lg"
           className="w-full flex items-center justify-center gap-2"
+          onClick={() => window.print()}
         >
           <Download className="w-5 h-5" />
           Descargar Ticket (PDF)
