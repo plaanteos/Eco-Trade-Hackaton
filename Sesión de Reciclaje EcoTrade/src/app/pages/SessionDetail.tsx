@@ -300,7 +300,7 @@ const SessionDetail: React.FC = () => {
                   variant="primary" 
                   size="lg"
                   className="flex-1 flex items-center justify-center gap-2"
-                  onClick={() => window.open(session.solanaReceipt?.explorerUrl, '_blank')}
+                  onClick={() => navigate(`/sesion/${id}/comprobante`)}
                 >
                   <ExternalLink className="w-5 h-5 text-white" />
                   Ver Petición On-Chain

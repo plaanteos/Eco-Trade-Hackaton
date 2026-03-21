@@ -22,6 +22,7 @@ import OperatorVerification from "./pages/OperatorVerification";
 import PublicVerification from "./pages/PublicVerification";
 import OperatorReviewQueue from "./pages/OperatorReviewQueue";
 import OperatorReviewDetail from "./pages/OperatorReviewDetail";
+import SolanaProofPage from "./pages/SolanaProofPage";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 
@@ -50,6 +51,7 @@ export const router = createBrowserRouter([
           { path: "crear/evidencia", Component: CreateSessionEvidence },
           { path: "crear/resumen", Component: CreateSessionSummary },
           { path: "sesion/:id/exito", Component: SessionSuccess },
+          { path: "sesion/:id/comprobante", Component: SolanaProofPage },
           { path: "sesion/:id", Component: SessionDetail },
           // Rutas de Operador
           { path: "operador/verificar/:id", Component: OperatorVerification },
