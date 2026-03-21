@@ -313,7 +313,7 @@ CREATE POLICY "session_evidence_insert_owner"
       SELECT 1 FROM public.recycling_sessions rs
       WHERE rs.id = session_evidence.session_id
         AND rs.user_id = auth.uid()
-        AND rs.status IN ('Borrador', 'Programada')
+        AND rs.status IN ('Borrador', 'Programada', 'En curso', 'Pendiente de verificación')
     )
   );
 

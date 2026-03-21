@@ -6,12 +6,12 @@ import { CarbonImpactBadge } from '../components/editorial/CarbonImpactBadge';
 import { getPublicSession } from '@/lib/sessions';
 import { verificarReciboPublico } from '@/lib/solana';
 import { PublicSessionData } from '@/lib/sessions';
-import { MapPin, Calendar, Clock, Package, Shield, Loader2, Leaf } from 'lucide-react';
+import { MapPin, Calendar, Clock, Package, Shield, Loader2, Leaf, ExternalLink } from 'lucide-react';
 
 const PublicVerification: React.FC = () => {
   const { id } = useParams();
   const [session, setSession] = useState<PublicSessionData | null>(null);
-  const [isValidOnChain, setIsValidOnChain] = useState<boolean | null>(null);
+  const [chainStatus, setChainStatus] = useState<'checking' | 'valid' | 'invalid' | 'missing'>('checking');
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -22,10 +22,11 @@ const PublicVerification: React.FC = () => {
         setSession(data);
         
         if (data?.solanaReceipt?.signature) {
+          setChainStatus('checking');
           const verification = await verificarReciboPublico(data.solanaReceipt.signature);
-          setIsValidOnChain(verification.valid);
+          setChainStatus(verification.valid ? 'valid' : 'invalid');
         } else {
-          setIsValidOnChain(false);
+          setChainStatus('missing');
         }
       } catch (err) {
         console.error(err);
@@ -63,6 +64,11 @@ const PublicVerification: React.FC = () => {
     );
   }
 
+  const receipt = session.solanaReceipt;
+  const isValidOnChain = chainStatus === 'valid';
+  const isChecking = chainStatus === 'checking';
+  const isInvalid = chainStatus === 'invalid';
+
   return (
     <div className="min-h-screen bg-[#F5F3ED]">
       <header className="bg-[#1A1A1A] text-[#F5F3ED] border-b-4 border-[#2D5016]">
@@ -74,7 +80,11 @@ const PublicVerification: React.FC = () => {
             Verificación de Recibo
           </h1>
           <p className="text-sm text-[#E8E6DD]">
-            Este recibo ha sido verificado y emitido en Solana blockchain (devnet).
+            {isChecking
+              ? 'Verificando transacción en Solana (devnet)…'
+              : isValidOnChain
+                ? 'Este recibo ha sido verificado y emitido en Solana blockchain (devnet).'
+                : 'Este recibo está registrado, pero la transacción aún no aparece confirmada en Solana.'}
           </p>
         </div>
       </header>
@@ -84,15 +94,27 @@ const PublicVerification: React.FC = () => {
           <div className="inline-block border-4 border-[#2D5016] bg-white px-12 py-6 transform rotate-1 shadow-lg">
             <Shield className="w-12 h-12 text-[#2D5016] mx-auto mb-3" />
             <div className="text-3xl font-bold text-[#2D5016] uppercase tracking-wider mb-2" style={{ fontFamily: 'var(--font-serif)' }}>
-              RECIBO VERIFICADO
+              {isValidOnChain ? 'RECIBO VERIFICADO' : 'RECIBO EN PROCESO'}
             </div>
             <div className="text-lg text-[#2D5016] uppercase tracking-wider mb-2" style={{ fontFamily: 'var(--font-serif)' }}>
               EN SOLANA
             </div>
-            {isValidOnChain !== null && (
+            {!isChecking && (
               <div className={`text-sm tracking-wider font-bold ${isValidOnChain ? 'text-green-600' : 'text-red-600'}`}>
                 {isValidOnChain ? '✓ FIRMA ON-CHAIN VÁLIDA' : '✗ FIRMA NO ENCONTRADA EN EXPLORADOR'}
               </div>
+            )}
+
+            {receipt?.explorerUrl && (
+              <a
+                href={receipt.explorerUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 mt-4 px-4 py-2 bg-[#2D5016] text-white uppercase tracking-wider text-xs hover:bg-[#4A7C2E]"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Ver transacción
+              </a>
             )}
           </div>
         </div>

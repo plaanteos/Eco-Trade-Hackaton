@@ -3,20 +3,10 @@ import { supabase } from '@/lib/supabase/client';
 import type { SolanaReceipt } from '@/app/types';
 
 const MEMO_PROGRAM_ID = new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr');
-const SOLANA_CLUSTER = 'devnet';
 const SOLANA_RPC_URL = 'https://api.devnet.solana.com';
 
 // Connection instance
 const connection = new Connection(SOLANA_RPC_URL, 'confirmed');
-
-async function sha256Hex(input: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(input);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hashBuffer))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-}
 
 // Funciones legacy de generacion de keypair local movidas a api/emit-solana.ts
 
@@ -25,80 +15,34 @@ async function sha256Hex(input: string): Promise<string> {
  * a través del SPL Memo Program.
  */
 export async function emitirReciboSolana(sessionId: string): Promise<SolanaReceipt> {
+  const res = await fetch('/api/emit-solana', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId }),
+  });
+
+  let data: any = null;
   try {
-    const res = await fetch('/api/emit-solana', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId })
-    });
-
-    const data = await res.json();
-
-    if (!res.ok || !data.success) {
-      throw new Error(data.error || 'Error del servidor en API Solana');
-    }
-
-    const receipt: SolanaReceipt = {
-      signature: data.signature,
-      cluster: data.cluster,
-      explorerUrl: data.explorerUrl,
-      emittedAt: new Date(),
-      programId: MEMO_PROGRAM_ID.toBase58()
-    };
-    
-    return receipt;
-  } catch (error: any) {
-    console.error('[Solana] Error llamando a API emit-solana (activando modo simulación):', error);
-    
-    // ── FALLBACK: Simulación demo para hackathon ──────────────────────────
-    try {
-      // 1. Cargar datos básicos para el hash
-      const { data: session } = await supabase
-        .from('recycling_sessions')
-        .select('id, session_number')
-        .eq('id', sessionId)
-        .single();
-        
-      const t = new Date().toISOString();
-      const simSignature = await sha256Hex(`ecotrade:sim:${sessionId}:${t}`);
-      const simExplorerUrl = `https://solscan.io/account/${simSignature.slice(0, 44)}?cluster=devnet`;
-
-      const simReceipt: SolanaReceipt = {
-        signature: simSignature,
-        cluster: SOLANA_CLUSTER,
-        explorerUrl: simExplorerUrl,
-        emittedAt: new Date(t),
-        programId: MEMO_PROGRAM_ID.toBase58(),
-      };
-
-      // Guardar vía RPC primero
-      const { error: rpcErr } = await supabase.rpc('insert_solana_receipt', {
-        p_session_id: sessionId,
-        p_signature: simReceipt.signature,
-        p_cluster: simReceipt.cluster,
-        p_explorer_url: simReceipt.explorerUrl,
-        p_program_id: simReceipt.programId ?? null,
-      });
-
-      if (rpcErr) {
-        await supabase.from('solana_receipts').upsert({
-          session_id: sessionId,
-          signature: simReceipt.signature,
-          cluster: simReceipt.cluster,
-          explorer_url: simReceipt.explorerUrl,
-          program_id: simReceipt.programId,
-          emitted_at: simReceipt.emittedAt.toISOString(),
-          status: 'confirmed',
-        }, { onConflict: 'session_id' });
-      }
-
-      console.info(`[Solana] Recibo simulado guardado para sesión ${sessionId}`);
-      return simReceipt;
-    } catch (fallbackError) {
-      console.error('[Solana] Incluso el fallback simulado falló:', fallbackError);
-      throw error; 
-    }
+    data = await res.json();
+  } catch {
+    // ignore json parse errors
   }
+
+  if (!res.ok || !data?.success) {
+    const message = data?.error || `Error del servidor en API Solana (${res.status})`;
+    console.error('[Solana] Error llamando a API emit-solana:', message);
+    throw new Error(message);
+  }
+
+  const receipt: SolanaReceipt = {
+    signature: data.signature,
+    cluster: data.cluster,
+    explorerUrl: data.explorerUrl,
+    emittedAt: new Date(),
+    programId: MEMO_PROGRAM_ID.toBase58(),
+  };
+
+  return receipt;
 }
 
 /**
@@ -108,7 +52,7 @@ export async function verificarReciboPublico(signature: string): Promise<{valid:
   try {
     const parsedTx = await connection.getParsedTransaction(signature, {
       commitment: 'confirmed',
-      maxSupportedTransactionVersion: 0.
+      maxSupportedTransactionVersion: 0
     });
 
     if (!parsedTx) {

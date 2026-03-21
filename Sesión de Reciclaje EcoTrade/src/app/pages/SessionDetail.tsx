@@ -9,10 +9,11 @@ import { TrustScore } from '../components/editorial/TrustScore';
 import { EvidenceHash } from '../components/editorial/EvidenceHash';
 import { CarbonImpactBadge } from '../components/editorial/CarbonImpactBadge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
-import { MapPin, Calendar, Clock, Package, Download, XCircle, RefreshCw, Loader2, ExternalLink } from 'lucide-react';
+import { MapPin, Calendar, Clock, Package, Download, XCircle, RefreshCw, Loader2, ExternalLink, Upload } from 'lucide-react';
 import { getSessionById, cancelSession as apiCancelSession } from '@/lib/sessions';
 import { RecyclingSession } from '@/app/types';
 import { useAuth } from '../context/AuthContext';
+import { uploadEvidence } from '@/lib/storage/uploadEvidence';
 
 const SessionDetail: React.FC = () => {
   const { id } = useParams();
@@ -25,6 +26,10 @@ const SessionDetail: React.FC = () => {
   const [session, setSession] = useState<RecyclingSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
+  const [isUploadingEvidence, setIsUploadingEvidence] = useState(false);
+  const [evidenceUploadError, setEvidenceUploadError] = useState<string | null>(null);
 
   const loadSession = useCallback(async (opts?: { silent?: boolean }) => {
     if (!id) return;
@@ -65,6 +70,14 @@ const SessionDetail: React.FC = () => {
       </div>
     );
   }
+
+  const lastEvidenceRequest = [...(session.timeline ?? [])]
+    .reverse()
+    .find((t) => t.actor === 'Operador' && (t.note ?? '').startsWith('Evidencia solicitada:'));
+
+  const evidenceRequestMessage = lastEvidenceRequest?.note
+    ? lastEvidenceRequest.note.replace(/^Evidencia solicitada:\s*/i, '').trim()
+    : (session.operatorNote ?? '').trim();
 
   const canCancel = session.status === 'Borrador' || session.status === 'Programada';
 
@@ -230,6 +243,73 @@ const SessionDetail: React.FC = () => {
               </tfoot>
             </table>
           </div>
+
+          {/* Solicitud de evidencia (visible para Usuario) */}
+          {!isOperador && lastEvidenceRequest && session.status !== 'Completada' && session.status !== 'Cancelada' && (
+            <Callout title="Evidencia solicitada por el operador" variant="warning">
+              <p className="text-sm mb-4">
+                {evidenceRequestMessage
+                  ? `Mensaje: ${evidenceRequestMessage}`
+                  : 'El operador solicitó evidencia adicional para completar la verificación.'}
+              </p>
+
+              <div className="bg-white border-2 border-[#1A1A1A] p-4">
+                <div className="text-xs uppercase tracking-wider text-[#4A4A4A] mb-2">
+                  Adjuntar evidencia fotográfica
+                </div>
+                <input
+                  type="file"
+                  multiple
+                  accept="image/jpeg,image/png,image/webp,image/heic"
+                  onChange={(e) => setEvidenceFiles(e.target.files ? Array.from(e.target.files) : [])}
+                  className="block w-full text-sm"
+                />
+
+                {evidenceFiles.length > 0 && (
+                  <div className="mt-2 text-xs text-[#4A4A4A]">
+                    {evidenceFiles.length} archivo(s) seleccionado(s)
+                  </div>
+                )}
+
+                {evidenceUploadError && (
+                  <div className="mt-2 text-xs text-[#B91C1C]">
+                    {evidenceUploadError}
+                  </div>
+                )}
+
+                <div className="mt-4">
+                  <EditorialButton
+                    variant="primary"
+                    size="md"
+                    className="w-full flex items-center justify-center gap-2"
+                    disabled={isUploadingEvidence || evidenceFiles.length === 0}
+                    onClick={async () => {
+                      setEvidenceUploadError(null);
+                      setIsUploadingEvidence(true);
+                      try {
+                        const result = await uploadEvidence(session.id, evidenceFiles);
+
+                        if (result.failed.length > 0) {
+                          setEvidenceUploadError(result.failed[0].reason);
+                        }
+
+                        setEvidenceFiles([]);
+                        await loadSession({ silent: true });
+                      } catch (err) {
+                        const message = err instanceof Error ? err.message : 'Error subiendo evidencia.';
+                        setEvidenceUploadError(message);
+                      } finally {
+                        setIsUploadingEvidence(false);
+                      }
+                    }}
+                  >
+                    <Upload className="w-4 h-4" />
+                    {isUploadingEvidence ? 'Subiendo…' : 'Subir evidencia'}
+                  </EditorialButton>
+                </div>
+              </div>
+            </Callout>
+          )}
 
           {/* Evidencia Fotográfica */}
           {session.evidence && session.evidence.length > 0 && (

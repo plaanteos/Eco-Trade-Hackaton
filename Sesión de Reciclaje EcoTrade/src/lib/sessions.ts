@@ -440,7 +440,35 @@ export async function getSessionById(sessionId: string): Promise<RecyclingSessio
   }
 
   if (!data) return null;
-  return mapSession(data as unknown as RawSession);
+
+  const raw = data as unknown as RawSession;
+
+  // Si Storage bucket es privado, public_url puede venir nulo.
+  // En ese caso, generamos signed URLs para mostrar las evidencias.
+  try {
+    const evidenceRows = raw.session_evidence ?? [];
+    const hasAnyEvidence = Array.isArray(evidenceRows) && evidenceRows.length > 0;
+    const hasPublicUrls = hasAnyEvidence && evidenceRows.some((e) => Boolean(e.public_url));
+
+    if (hasAnyEvidence && !hasPublicUrls) {
+      const signed = await Promise.all(
+        evidenceRows.map((e) =>
+          supabase.storage.from('session-evidence').createSignedUrl(e.storage_path, 60 * 60)
+        )
+      );
+
+      const patchedEvidence = evidenceRows.map((e, idx) => ({
+        ...e,
+        public_url: signed[idx]?.data?.signedUrl ?? e.public_url,
+      }));
+
+      return mapSession({ ...raw, session_evidence: patchedEvidence } as RawSession);
+    }
+  } catch (err) {
+    console.warn('[getSessionById] Warning creando signed URLs de evidencia:', err);
+  }
+
+  return mapSession(raw);
 }
 
 // ────────────────────────────────────────────────────────────
