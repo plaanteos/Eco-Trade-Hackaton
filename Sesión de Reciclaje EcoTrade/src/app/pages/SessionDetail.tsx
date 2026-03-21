@@ -7,6 +7,7 @@ import { Callout } from '../components/editorial/Callout';
 import { SolanaReceipt } from '../components/editorial/SolanaReceipt';
 import { TrustScore } from '../components/editorial/TrustScore';
 import { EvidenceHash } from '../components/editorial/EvidenceHash';
+import { CarbonImpactBadge } from '../components/editorial/CarbonImpactBadge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { MapPin, Calendar, Clock, Package, Download, XCircle, Edit, RefreshCw, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
 import { getSessionById, cancelSession as apiCancelSession } from '@/lib/sessions';
@@ -234,6 +235,17 @@ const SessionDetail: React.FC = () => {
                 totalKg={session.verifiedTotalKg || session.totalKg}
                 ecoCoins={session.ecoCoins}
               />
+
+              {/* Carbon Impact Badge */}
+              {session.carbonOffset && (
+                <div className="mt-4">
+                  <CarbonImpactBadge 
+                    co2Kg={session.carbonOffset.co2_avoided_kg} 
+                    trees={session.carbonOffset.trees_equivalent} 
+                    className="w-full justify-center"
+                  />
+                </div>
+              )}
 
               {/* QR for public verification */}
               <div className="bg-white border-2 border-[#1A1A1A] p-6">

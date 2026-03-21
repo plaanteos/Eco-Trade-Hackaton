@@ -38,7 +38,11 @@ export async function emitirReciboSolana(sessionId: string): Promise<SolanaRecei
       evidence_hash,
       operator_id,
       verified_by,
-      collection_points(name)
+      collection_points(name),
+      carbon_footprint_offsets(
+        co2_avoided_kg,
+        trees_equivalent
+      )
     `)
     .eq('id', sessionId)
     .single();
@@ -51,6 +55,10 @@ export async function emitirReciboSolana(sessionId: string): Promise<SolanaRecei
     ? session.collection_points[0] 
     : session.collection_points;
   
+  const cf = Array.isArray(session.carbon_footprint_offsets)
+    ? session.carbon_footprint_offsets[0]
+    : session.carbon_footprint_offsets;
+
   const puntoNombre = cp?.name || 'Desconocido';
   const operatorId = session.verified_by || session.operator_id;
 
@@ -68,6 +76,8 @@ export async function emitirReciboSolana(sessionId: string): Promise<SolanaRecei
     totalKg: session.verified_total_kg || 0,
     ecoCoins: session.eco_coins || 0,
     evidenceHash: session.evidence_hash || "",
+    co2Kg: cf ? Number(cf.co2_avoided_kg) : 0,
+    trees: cf ? Number(cf.trees_equivalent) : 0,
     verifiedBy: operatorId
   };
 

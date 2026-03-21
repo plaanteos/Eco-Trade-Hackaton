@@ -60,6 +60,14 @@ export interface CollectionPoint {
   limits?: string;
 }
 
+export interface CarbonOffset {
+  id?: string;
+  co2_avoided_kg: number;
+  trees_equivalent: number;
+  kg_by_material?: Record<string, number>;
+  calculated_at?: Date;
+}
+
 export interface SessionTimeline {
   status: SessionStatus;
   timestamp: Date;
@@ -92,4 +100,5 @@ export interface RecyclingSession {
   operatorId?: string;
   verifiedBy?: string;
   qrCode?: string;
+  carbonOffset?: CarbonOffset;
 }

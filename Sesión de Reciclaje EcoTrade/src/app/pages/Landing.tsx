@@ -1,15 +1,25 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../context/AuthContext';
 import { EditorialButton } from '../components/editorial/EditorialButton';
 import { Callout } from '../components/editorial/Callout';
 import { useSession } from '../context/SessionContext';
 import { Leaf, Award, MapPin, AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
+import { getUserTotalOffset } from '@/lib/carbonOffset';
 
 const Landing: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { sessions } = useSession();
+  const [totalOffset, setTotalOffset] = useState<{ totalCo2Kg: number; totalTrees: number } | null>(null);
+
+  useEffect(() => {
+    if (user?.id && user?.role !== 'Operador') {
+      getUserTotalOffset(user.id)
+        .then(setTotalOffset)
+        .catch(err => console.error("Error fetching total offset:", err));
+    }
+  }, [user]);
 
   // Calcular estadísticas
   const completedSessions = sessions.filter(s => s.status === 'Completada');
@@ -186,6 +196,26 @@ const Landing: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Impacto Total del Usuario */}
+      {totalOffset && (
+        <div className="mb-12 bg-white border-2 border-[#1A1A1A] p-8">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b-2 border-[#1A1A1A]">
+            <div className="flex items-center gap-4">
+              <Leaf className="w-10 h-10 text-[#2D5016]" />
+              <div>
+                <h2 className="m-0 leading-none">Tu impacto total: {totalOffset.totalCo2Kg.toFixed(1)} kg CO₂ evitado</h2>
+                <div className="text-sm mt-1 text-[#4A4A4A]">equivale a plantar {totalOffset.totalTrees} árboles</div>
+              </div>
+            </div>
+          </div>
+          <div className="pt-4 flex flex-col md:flex-row gap-4 justify-between text-sm text-[#4A4A4A]">
+            <p className="flex-1 md:pr-12">
+              Cada kg verificado on-chain reduce la huella de plástico de forma auditable — como Social Plastic de Plastic Bank, pero público.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* How it works */}
       <div className="mb-12">

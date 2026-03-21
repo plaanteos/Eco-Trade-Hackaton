@@ -17,6 +17,7 @@
 import { supabase } from "@/lib/supabase/client";
 import { calculateAndSaveTrustScore } from "@/lib/trustScore";
 import { uploadEvidence } from "@/lib/storage/uploadEvidence";
+import { calculateAndSaveCarbonOffset } from "@/lib/carbonOffset";
 import type {
   RecyclingSession,
   SessionStatus,
@@ -63,6 +64,11 @@ export interface PublicSessionData {
   materials: Pick<Material, "type" | "kg" | "verified" | "verifiedKg">[];
   evidenceHash?: string;
   solanaReceipt?: SolanaReceipt;
+  carbonOffset?: {
+    co2_avoided_kg: number;
+    trees_equivalent: number;
+    kg_by_material?: Record<string, number>;
+  };
   status: SessionStatus;
   createdAt: Date;
 }
@@ -95,6 +101,15 @@ interface RawSession {
   trust_scores: RawTrustScore | null;
   solana_receipts: RawSolanaReceipt | null;
   session_timeline: RawTimeline[];
+  carbon_footprint_offsets: RawCarbonOffset | null;
+}
+
+interface RawCarbonOffset {
+  id: string;
+  co2_avoided_kg: number;
+  trees_equivalent: number;
+  kg_by_material: Record<string, number> | null;
+  calculated_at: string;
 }
 
 interface RawCollectionPoint {
@@ -210,6 +225,13 @@ const FULL_SESSION_SELECT = `
     actor,
     note,
     created_at
+  ),
+  carbon_footprint_offsets (
+    id,
+    co2_avoided_kg,
+    trees_equivalent,
+    kg_by_material,
+    calculated_at
   )
 `.trim();
 
@@ -287,6 +309,10 @@ function mapSession(raw: RawSession): RecyclingSession {
   // Ordenar timeline cronológicamente
   const sortedTimeline = mapTimeline(raw.session_timeline ?? []);
 
+  const offsetRaw = Array.isArray(raw.carbon_footprint_offsets) 
+    ? raw.carbon_footprint_offsets[0] 
+    : raw.carbon_footprint_offsets;
+
   return {
     id: raw.id,
     sessionNumber: raw.session_number,
@@ -316,6 +342,13 @@ function mapSession(raw: RawSession): RecyclingSession {
     operatorId: raw.operator_id ?? undefined,
     verifiedBy: raw.verified_by ?? undefined,
     qrCode: raw.qr_code ?? undefined,
+    carbonOffset: offsetRaw ? {
+      id: offsetRaw.id,
+      co2_avoided_kg: Number(offsetRaw.co2_avoided_kg),
+      trees_equivalent: Number(offsetRaw.trees_equivalent),
+      kg_by_material: offsetRaw.kg_by_material ?? undefined,
+      calculated_at: new Date(offsetRaw.calculated_at)
+    } : undefined,
   };
 }
 
@@ -503,13 +536,14 @@ export async function createSession(data: CreateSessionInput): Promise<Recycling
     }
   }
 
-  // ── 5. Calcular y guardar trust score ─────────────────────
+  // ── 5. Calcular y guardar trust score y carbon offset ─────────────────────
   // Delegates to trustScore.ts which loads its own data from Supabase
   // and handles the 'Pendiente de verificación' transition if needed.
   try {
     await calculateAndSaveTrustScore(sessionId);
+    await calculateAndSaveCarbonOffset(sessionId);
   } catch (tsErr) {
-    console.warn("[createSession] Trust score warning:", tsErr);
+    console.warn("[createSession] Trust score / Carbon offset warning:", tsErr);
   }
 
   // ── 6. Generar QR Code ────────────────────────────────────
@@ -611,10 +645,13 @@ export async function finalizarSesion(
     console.warn("[finalizarSesion] increment_profile_stats RPC warning:", profileError.message);
   }
 
-  // ── 3. Emitir recibo Solana ───────────────────────────────
+  // 3. Modulo de Huella de Carbono
+  await calculateAndSaveCarbonOffset(sessionId);
+
+  // ── 4. Emitir recibo Solana ───────────────────────────────
   await emitirReciboSolana(sessionId, sessionData.session_number);
 
-  // ── 4. Insertar en timeline ───────────────────────────────
+  // ── 5. Insertar en timeline ───────────────────────────────
   await insertTimeline(
     sessionId,
     "Completada",
@@ -705,6 +742,11 @@ export async function getPublicSession(sessionId: string): Promise<PublicSession
         explorer_url,
         program_id,
         emitted_at
+      ),
+      carbon_footprint_offsets (
+        co2_avoided_kg,
+        trees_equivalent,
+        kg_by_material
       )
     `)
     .eq("id", sessionId)
@@ -721,6 +763,7 @@ export async function getPublicSession(sessionId: string): Promise<PublicSession
 
   const cp = Array.isArray(d.collection_points) ? d.collection_points[0] : d.collection_points;
   const sr = Array.isArray(d.solana_receipts) ? d.solana_receipts[0] : d.solana_receipts;
+  const cf = Array.isArray(d.carbon_footprint_offsets) ? d.carbon_footprint_offsets[0] : d.carbon_footprint_offsets;
 
   return {
     sessionNumber: d.session_number,
@@ -744,6 +787,11 @@ export async function getPublicSession(sessionId: string): Promise<PublicSession
     ),
     evidenceHash: d.evidence_hash ?? undefined,
     solanaReceipt: sr ? mapSolanaReceipt(sr) : undefined,
+    carbonOffset: cf ? {
+      co2_avoided_kg: Number(cf.co2_avoided_kg),
+      trees_equivalent: Number(cf.trees_equivalent),
+      kg_by_material: cf.kg_by_material ?? undefined,
+    } : undefined,
     createdAt: new Date(d.created_at),
   };
 }

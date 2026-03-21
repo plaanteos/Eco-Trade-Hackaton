@@ -219,5 +219,61 @@ ORDER BY routine_name;
 */
 
 -- ──────────────────────────────────────────────────────────
+-- RPC 5: upsert_carbon_offset
+--   Crea o actualiza el impacto de huella de carbono de una sesión.
+-- ──────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION public.upsert_carbon_offset(
+  p_session_id      UUID,
+  p_user_id         UUID,
+  p_co2_avoided_kg  DECIMAL,
+  p_trees_equivalent INTEGER,
+  p_kg_by_material  TEXT   -- JSON string → cast a JSONB
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  -- Verificar acceso a la sesión
+  IF NOT EXISTS (
+    SELECT 1 FROM public.recycling_sessions rs
+    WHERE rs.id = p_session_id
+      AND (
+        rs.user_id = auth.uid()
+        OR public.is_operator()
+      )
+  ) THEN
+    RAISE EXCEPTION 'Acceso denegado a la sesión %', p_session_id;
+  END IF;
+
+  INSERT INTO public.carbon_footprint_offsets (
+    session_id,
+    user_id,
+    co2_avoided_kg,
+    trees_equivalent,
+    kg_by_material
+  )
+  VALUES (
+    p_session_id,
+    p_user_id,
+    p_co2_avoided_kg,
+    p_trees_equivalent,
+    p_kg_by_material::JSONB
+  )
+  ON CONFLICT (session_id)
+  DO UPDATE SET
+    co2_avoided_kg   = EXCLUDED.co2_avoided_kg,
+    trees_equivalent = EXCLUDED.trees_equivalent,
+    kg_by_material   = EXCLUDED.kg_by_material,
+    calculated_at    = NOW();
+END;
+$$;
+
+COMMENT ON FUNCTION public.upsert_carbon_offset IS
+  'Crea o actualiza el impacto de huella de carbono de una sesión (SECURITY DEFINER)';
+
+
+-- ──────────────────────────────────────────────────────────
 -- FIN DE RPCs
 -- ──────────────────────────────────────────────────────────

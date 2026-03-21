@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router';
 import { EditorialButton } from '../components/editorial/EditorialButton';
 import { Callout } from '../components/editorial/Callout';
 import { Ticket } from '../components/editorial/Ticket';
+import { CarbonImpactBadge } from '../components/editorial/CarbonImpactBadge';
 import { useSession } from '../context/SessionContext';
 import { CheckCircle2, Download, ArrowRight } from 'lucide-react';
 import type { RecyclingSession } from '../types';
@@ -137,9 +138,19 @@ const SessionSuccess: React.FC = () => {
       </div>
 
       {/* Ticket */}
-      <div className="mb-12 max-w-2xl mx-auto">
+      <div className="mb-8 max-w-2xl mx-auto">
         <Ticket session={session} showStamp />
       </div>
+
+      {session.carbonOffset && (
+        <div className="mb-12 max-w-2xl mx-auto text-center">
+          <CarbonImpactBadge 
+            co2Kg={session.carbonOffset.co2_avoided_kg}
+            trees={session.carbonOffset.trees_equivalent}
+            className="w-full justify-center"
+          />
+        </div>
+      )}
 
       {/* Actions */}
       <div className="max-w-2xl mx-auto space-y-4 mb-12">

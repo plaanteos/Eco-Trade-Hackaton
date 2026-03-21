@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router';
 import { SolanaReceipt } from '../components/editorial/SolanaReceipt';
 import { EvidenceHash } from '../components/editorial/EvidenceHash';
+import { CarbonImpactBadge } from '../components/editorial/CarbonImpactBadge';
 import { getPublicSession } from '@/lib/sessions';
 import { verificarReciboPublico } from '@/lib/solana';
 import { PublicSessionData } from '@/lib/sessions';
-import { MapPin, Calendar, Clock, Package, Shield, Loader2 } from 'lucide-react';
+import { MapPin, Calendar, Clock, Package, Shield, Loader2, Leaf } from 'lucide-react';
 
 const PublicVerification: React.FC = () => {
   const { id } = useParams();
@@ -104,6 +105,31 @@ const PublicVerification: React.FC = () => {
             ecoCoins={session.ecoCoins}
           />
         </div>
+
+        {/* Bloque de Impacto Ambiental */}
+        {session.carbonOffset && (
+          <div className="bg-white border-2 border-[#1A1A1A] mb-8 p-8">
+            <div className="flex flex-col md:flex-row items-center gap-6">
+              <div className="flex-shrink-0 bg-[#E8F4E3] p-4 border-2 border-[#2D5016]">
+                <Leaf className="w-10 h-10 text-[#2D5016]" />
+              </div>
+              <div className="flex-1">
+                <div className="text-xs uppercase tracking-wider text-[#4A4A4A] mb-2 font-bold">
+                  Impacto Ambiental Verificado
+                </div>
+                <CarbonImpactBadge 
+                  co2Kg={session.carbonOffset.co2_avoided_kg} 
+                  trees={session.carbonOffset.trees_equivalent} 
+                  className="p-0 border-none bg-transparent"
+                />
+                <p className="mt-4 text-xs text-[#4A4A4A] border-t border-[#E8E6DD] pt-3 italic">
+                  Impacto calculado con factores internacionales de conversión. 
+                  Verificable on-chain junto al recibo Solana.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <div className="bg-white border-2 border-[#1A1A1A] p-6">
