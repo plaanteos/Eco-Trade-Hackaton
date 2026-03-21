@@ -34,6 +34,9 @@ Thumbs.db
 logs/
 *.log
 
+# ─── Secretos locales ─────────────────────────────────────────
+Apis.txt
+
 # ─── Gemini / AI internal ─────────────────────────────────────
 .gemini/
 

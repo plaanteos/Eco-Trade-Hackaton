@@ -23,11 +23,21 @@ import { createClient } from '@supabase/supabase-js';
 const MEMO_PROGRAM_ID = new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr');
 const CLUSTER = 'devnet';
 
+function getFirstEnv(...names: string[]): string | undefined {
+  for (const name of names) {
+    const value = process.env[name];
+    if (value && value.trim().length > 0) return value;
+  }
+  return undefined;
+}
+
 // Usa el RPC de Alchemy si está disponible, o el público de devnet
+const ALCHEMY_KEY = getFirstEnv('ALCHEMY_APIKEY');
 const RPC_URL =
-  process.env.SOLANA_RPC_URL ||
-  `https://solana-devnet.g.alchemy.com/v2/${process.env.ALCHEMY_APIKEY || ''}` ||
-  'https://api.devnet.solana.com';
+  getFirstEnv('SOLANA_RPC_URL', 'VITE_SOLANA_RPC_URL') ||
+  (ALCHEMY_KEY
+    ? `https://solana-devnet.g.alchemy.com/v2/${ALCHEMY_KEY}`
+    : 'https://api.devnet.solana.com');
 
 // ── Helper: base58 (sin dependencia extra) ───────────────────
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
@@ -106,11 +116,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { sessionId } = req.body || {};
   if (!sessionId) return res.status(400).json({ error: 'sessionId is required' });
 
+  const supabaseUrl = getFirstEnv('SUPABASE_URL', 'VITE_SUPABASE_URL');
+  const serviceRoleKey = getFirstEnv('SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_KEY');
+
+  if (!supabaseUrl) {
+    return res.status(500).json({
+      error:
+        'Missing Supabase URL env var. Set SUPABASE_URL (recommended) or VITE_SUPABASE_URL in Vercel Environment Variables (Production).',
+    });
+  }
+
+  if (!serviceRoleKey) {
+    return res.status(500).json({
+      error:
+        'Missing Supabase Service Role env var. Set SUPABASE_SERVICE_ROLE_KEY in Vercel Environment Variables (Production).',
+    });
+  }
+
   // Cliente Supabase con service role para bypassar RLS
-  const supabase = createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  const supabase = createClient(supabaseUrl, serviceRoleKey);
 
   try {
     // 1. Cargar datos de la sesión
