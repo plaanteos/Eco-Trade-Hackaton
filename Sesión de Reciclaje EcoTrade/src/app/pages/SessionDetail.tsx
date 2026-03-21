@@ -14,6 +14,7 @@ import { getSessionById, cancelSession as apiCancelSession } from '@/lib/session
 import { RecyclingSession } from '@/app/types';
 import { useAuth } from '../context/AuthContext';
 import { uploadEvidence } from '@/lib/storage/uploadEvidence';
+import { emitirReciboSolana } from '@/lib/solana';
 
 const SessionDetail: React.FC = () => {
   const { id } = useParams();
@@ -78,6 +79,10 @@ const SessionDetail: React.FC = () => {
   const evidenceRequestMessage = lastEvidenceRequest?.note
     ? lastEvidenceRequest.note.replace(/^Evidencia solicitada:\s*/i, '').trim()
     : (session.operatorNote ?? '').trim();
+
+  const hasReceipt = Boolean(session.solanaReceipt);
+  const isDemoReceipt = Boolean(session.solanaReceipt && /^[0-9a-f]{64}$/i.test(session.solanaReceipt.signature));
+  const isMissingReceipt = session.status === 'Completada' && !session.solanaReceipt;
 
   const canCancel = session.status === 'Borrador' || session.status === 'Programada';
 
@@ -335,12 +340,40 @@ const SessionDetail: React.FC = () => {
           )}
 
           {/* On-chain pending (completed but no receipt yet) */}
-          {session.status === 'Completada' && !session.solanaReceipt && (
+          {isMissingReceipt && (
             <Callout title="Recibo On-Chain" variant="warning">
               <p className="text-sm mb-4">
                 La sesión ya fue completada, pero el recibo en Solana aún no aparece.
                 Esto puede tardar unos segundos si se está confirmando la transacción.
               </p>
+
+              {isOperador && (
+                <div className="mb-3">
+                  <EditorialButton
+                    variant="primary"
+                    size="md"
+                    onClick={async () => {
+                      try {
+                        setIsRefreshing(true);
+                        await emitirReciboSolana(session.id);
+                        await loadSession({ silent: true });
+                      } catch (err) {
+                        console.error(err);
+                        alert(
+                          'No se pudo emitir el recibo en Solana. Verifica el deploy y las variables de entorno en Vercel (SUPABASE_SERVICE_ROLE_KEY y SOLANA_OPERATOR_SEED).'
+                        );
+                      } finally {
+                        setIsRefreshing(false);
+                      }
+                    }}
+                    disabled={isRefreshing}
+                    className="w-full"
+                  >
+                    {isRefreshing ? 'Emitiendo…' : 'Emitir en Solana'}
+                  </EditorialButton>
+                </div>
+              )}
+
               <EditorialButton
                 variant="outline"
                 size="md"
@@ -349,6 +382,36 @@ const SessionDetail: React.FC = () => {
                 className="w-full"
               >
                 {isRefreshing ? 'Actualizando…' : 'Actualizar'}
+              </EditorialButton>
+            </Callout>
+          )}
+
+          {/* Caso: recibo demo (hash hex) guardado históricamente */}
+          {isOperador && session.status === 'Completada' && hasReceipt && isDemoReceipt && (
+            <Callout title="Recibo On-Chain" variant="warning">
+              <p className="text-sm mb-4">
+                Este recibo fue generado en modo demo (hash) y no corresponde a una transacción real.
+                Puedes re-emitirlo para obtener una firma válida en Solana devnet.
+              </p>
+              <EditorialButton
+                variant="primary"
+                size="md"
+                onClick={async () => {
+                  try {
+                    setIsRefreshing(true);
+                    await emitirReciboSolana(session.id);
+                    await loadSession({ silent: true });
+                  } catch (err) {
+                    console.error(err);
+                    alert('No se pudo re-emitir el recibo en Solana. Revisa las variables de entorno en Vercel.');
+                  } finally {
+                    setIsRefreshing(false);
+                  }
+                }}
+                disabled={isRefreshing}
+                className="w-full"
+              >
+                {isRefreshing ? 'Emitiendo…' : 'Re-emitir en Solana'}
               </EditorialButton>
             </Callout>
           )}

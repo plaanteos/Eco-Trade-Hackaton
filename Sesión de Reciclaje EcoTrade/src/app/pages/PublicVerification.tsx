@@ -65,6 +65,7 @@ const PublicVerification: React.FC = () => {
   }
 
   const receipt = session.solanaReceipt;
+  const isSimulated = /^[0-9a-f]{64}$/i.test(receipt.signature);
   const isValidOnChain = chainStatus === 'valid';
   const isChecking = chainStatus === 'checking';
   const isInvalid = chainStatus === 'invalid';
@@ -105,7 +106,7 @@ const PublicVerification: React.FC = () => {
               </div>
             )}
 
-            {receipt?.explorerUrl && (
+            {!isSimulated && receipt?.explorerUrl && (
               <a
                 href={receipt.explorerUrl}
                 target="_blank"
