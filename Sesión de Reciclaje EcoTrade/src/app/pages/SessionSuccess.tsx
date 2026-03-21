@@ -1,16 +1,126 @@
-import React from 'react';
-import { useParams, useNavigate } from 'react-router';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router';
 import { EditorialButton } from '../components/editorial/EditorialButton';
+import { Callout } from '../components/editorial/Callout';
 import { Ticket } from '../components/editorial/Ticket';
 import { useSession } from '../context/SessionContext';
 import { CheckCircle2, Download, ArrowRight } from 'lucide-react';
+import type { RecyclingSession } from '../types';
 
 const SessionSuccess: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { sessions } = useSession();
 
-  const session = sessions.find(s => s.id === id) || sessions[0];
+  const sessionFromState = (location.state as any)?.session as RecyclingSession | undefined;
+  const sessionFromContext = useMemo(() => {
+    if (!id) return undefined;
+    return sessions.find((s) => s.id === id);
+  }, [id, sessions]);
+
+  const [session, setSession] = useState<RecyclingSession | null>(() => {
+    return sessionFromState ?? sessionFromContext ?? null;
+  });
+  const [isFetching, setIsFetching] = useState<boolean>(() => {
+    return !sessionFromState && !sessionFromContext;
+  });
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (sessionFromState) {
+      setSession(sessionFromState);
+      setIsFetching(false);
+      setFetchError(null);
+      return;
+    }
+
+    if (sessionFromContext) {
+      setSession(sessionFromContext);
+      setIsFetching(false);
+      setFetchError(null);
+      return;
+    }
+
+    if (!id) {
+      setSession(null);
+      setIsFetching(false);
+      setFetchError('No se encontró el identificador de la sesión.');
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        setIsFetching(true);
+        setFetchError(null);
+        const { getSessionById } = await import('@/lib/sessions');
+        const s = await getSessionById(id);
+        if (cancelled) return;
+        if (!s) {
+          setFetchError('No se pudo cargar la sesión recién creada.');
+          setSession(null);
+        } else {
+          setSession(s);
+        }
+      } catch (e: any) {
+        if (cancelled) return;
+        setFetchError(e?.message || 'Error al cargar la sesión.');
+        setSession(null);
+      } finally {
+        if (!cancelled) setIsFetching(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id, sessionFromContext, sessionFromState]);
+
+  if (isFetching) {
+    return (
+      <div className="max-w-5xl mx-auto px-6 py-16">
+        <div className="text-center mb-12">
+          <div className="inline-block p-6 mb-6">
+            <CheckCircle2 className="w-20 h-20 text-[#2D5016]" />
+          </div>
+          <h1 className="mb-4 text-[#2D5016]">Creando tu sesión…</h1>
+          <p className="text-xl text-[#4A4A4A] max-w-2xl mx-auto">
+            Un momento, estamos cargando el ticket.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <div className="max-w-5xl mx-auto px-6 py-16">
+        <div className="text-center mb-12">
+          <h1 className="mb-4">No pudimos cargar tu sesión</h1>
+          <p className="text-lg text-[#4A4A4A] max-w-2xl mx-auto">
+            {fetchError || 'Intenta volver al historial y abrir la sesión desde ahí.'}
+          </p>
+        </div>
+
+        <div className="max-w-2xl mx-auto space-y-4">
+          <Callout title="Sugerencia" variant="info">
+            <p className="text-sm">
+              Si tu sesión se creó correctamente, debería aparecer en tu historial en unos segundos.
+            </p>
+          </Callout>
+          <EditorialButton
+            variant="primary"
+            size="lg"
+            onClick={() => navigate('/historial')}
+            className="w-full"
+          >
+            Ir al Historial
+          </EditorialButton>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-16">

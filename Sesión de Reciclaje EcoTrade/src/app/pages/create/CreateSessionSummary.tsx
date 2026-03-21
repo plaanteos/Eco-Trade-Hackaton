@@ -43,7 +43,7 @@ const CreateSessionSummary: React.FC = () => {
       });
 
       clearDraft();
-      navigate(`/sesion/${session.id}/exito`);
+      navigate(`/sesion/${session.id}/exito`, { state: { session } });
     } catch (error) {
       console.error('Error al crear sesión:', error);
       alert('Hubo un error al crear la sesión. Por favor, intenta de nuevo.');
