@@ -279,13 +279,13 @@ const Login: React.FC = () => {
             </div>
             <button
               type="submit"
-              disabled={busy || opLoading}
+              disabled={callbackLoading || opLoading}
               className="w-full flex items-center justify-center gap-2 py-3 px-6 transition-all duration-150"
               style={{
                 backgroundColor: 'transparent',
                 color: '#1A1A1A',
                 border: '2px solid #1A1A1A',
-                cursor: (busy || opLoading) ? 'not-allowed' : 'pointer',
+                cursor: (callbackLoading || opLoading) ? 'not-allowed' : 'pointer',
                 fontFamily: 'inherit',
                 fontSize: '0.85rem',
                 fontWeight: 600,
@@ -293,13 +293,13 @@ const Login: React.FC = () => {
                 textTransform: 'uppercase',
               }}
               onMouseEnter={e => {
-                if (!busy && !opLoading) {
+                if (!callbackLoading && !opLoading) {
                   (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#1A1A1A';
                   (e.currentTarget as HTMLButtonElement).style.color = '#F5F3ED';
                 }
               }}
               onMouseLeave={e => {
-                if (!busy && !opLoading) {
+                if (!callbackLoading && !opLoading) {
                   (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent';
                   (e.currentTarget as HTMLButtonElement).style.color = '#1A1A1A';
                 }

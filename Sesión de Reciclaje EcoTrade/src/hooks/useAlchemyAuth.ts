@@ -14,6 +14,25 @@ import { supabase } from '@/lib/supabase/client';
 import { deriveWalletAddress, getAlchemyClient } from '@/lib/alchemy';
 import type { UserRole } from '@/app/types';
 
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const id = window.setTimeout(() => {
+      reject(new Error(`[EcoTrade] Timeout (${ms}ms) en ${label}`));
+    }, ms);
+
+    promise.then(
+      (value) => {
+        window.clearTimeout(id);
+        resolve(value);
+      },
+      (err) => {
+        window.clearTimeout(id);
+        reject(err);
+      }
+    );
+  });
+}
+
 // ─── Tipos ───────────────────────────────────────────────────
 
 export interface AlchemyAuthUser {
@@ -51,7 +70,11 @@ export function useAlchemyAuth(): UseAlchemyAuthReturn {
     setError(null);
 
     try {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      const { data: { session }, error: sessionError } = await withTimeout(
+        supabase.auth.getSession(),
+        8000,
+        'supabase.auth.getSession()'
+      );
 
       if (sessionError) throw sessionError;
       if (!session?.user) {
@@ -62,30 +85,42 @@ export function useAlchemyAuth(): UseAlchemyAuthReturn {
       const supabaseUser = session.user;
 
       // Derivar wallet Solana determinísticamente
-      const walletAddress = await deriveWalletAddress(supabaseUser.id);
+      const walletAddress = await withTimeout(
+        deriveWalletAddress(supabaseUser.id),
+        4000,
+        'deriveWalletAddress()'
+      );
 
       // Leer perfil existente para preservar el role
-      const { data: existingProfile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', supabaseUser.id)
-        .maybeSingle();
+      const { data: existingProfile } = await withTimeout(
+        supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', supabaseUser.id)
+          .maybeSingle(),
+        6000,
+        'profiles.select(role)'
+      );
 
       const role: UserRole = (existingProfile?.role as UserRole) ?? 'Usuario';
 
       // Upsert: sólo escribe role si NO existía previamente
-      const { error: upsertError } = await supabase
-        .from('profiles')
-        .upsert(
-          {
-            id: supabaseUser.id,
-            email: supabaseUser.email ?? '',
-            wallet_address: walletAddress,
-            // Sólo establece role si el perfil es nuevo
-            ...(existingProfile ? {} : { role }),
-          },
-          { onConflict: 'id' }
-        );
+      const { error: upsertError } = await withTimeout(
+        supabase
+          .from('profiles')
+          .upsert(
+            {
+              id: supabaseUser.id,
+              email: supabaseUser.email ?? '',
+              wallet_address: walletAddress,
+              // Sólo establece role si el perfil es nuevo
+              ...(existingProfile ? {} : { role }),
+            },
+            { onConflict: 'id' }
+          ),
+        6000,
+        'profiles.upsert()'
+      );
 
       if (upsertError) {
         // No detener el flujo si el upsert falla (RLS, tabla no existe todavía, etc.)
@@ -123,7 +158,7 @@ export function useAlchemyAuth(): UseAlchemyAuthReturn {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event) => {
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
-          await syncSession();
+          void syncSession();
         } else if (event === 'SIGNED_OUT') {
           setUser(null);
           setIsLoading(false);
