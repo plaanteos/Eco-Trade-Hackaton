@@ -1,12 +1,24 @@
 import { Connection, PublicKey } from '@solana/web3.js';
 import { supabase } from '@/lib/supabase/client';
 import type { SolanaReceipt } from '@/app/types';
+import { CONFIG } from '@/lib/config';
 
 const MEMO_PROGRAM_ID = new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr');
-const SOLANA_RPC_URL = 'https://api.devnet.solana.com';
 
-// Connection instance
-const connection = new Connection(SOLANA_RPC_URL, 'confirmed');
+function getRpcUrlForCluster(cluster: SolanaReceipt['cluster']): string {
+  // Si el usuario configuró un RPC y coincide con su red actual, usarlo.
+  if (CONFIG.SOLANA_NETWORK === cluster && CONFIG.SOLANA_RPC_URL) return CONFIG.SOLANA_RPC_URL;
+
+  switch (cluster) {
+    case 'devnet':
+      return 'https://api.devnet.solana.com';
+    case 'testnet':
+      return 'https://api.testnet.solana.com';
+    case 'mainnet-beta':
+    default:
+      return 'https://api.mainnet-beta.solana.com';
+  }
+}
 
 // Funciones legacy de generacion de keypair local movidas a api/emit-solana.ts
 
@@ -50,6 +62,12 @@ export async function emitirReciboSolana(sessionId: string): Promise<SolanaRecei
  */
 export async function verificarReciboPublico(signature: string): Promise<{valid: boolean, data: any}> {
   try {
+    // Por defecto intentamos en la red configurada. Si la verificación pública
+    // necesita otra red (según el recibo), el caller debe pasar el cluster.
+    const cluster = (CONFIG.SOLANA_NETWORK as SolanaReceipt['cluster']) || 'devnet';
+    const rpcUrl = getRpcUrlForCluster(cluster);
+    const connection = new Connection(rpcUrl, 'confirmed');
+
     const parsedTx = await connection.getParsedTransaction(signature, {
       commitment: 'confirmed',
       maxSupportedTransactionVersion: 0
@@ -79,6 +97,40 @@ export async function verificarReciboPublico(signature: string): Promise<{valid:
 }
 
 /**
+ * Verifica una firma contra un cluster específico (devnet/testnet/mainnet-beta).
+ */
+export async function verificarReciboPublicoEnCluster(
+  signature: string,
+  cluster: SolanaReceipt['cluster']
+): Promise<{ valid: boolean; data: any }> {
+  try {
+    const rpcUrl = getRpcUrlForCluster(cluster);
+    const connection = new Connection(rpcUrl, 'confirmed');
+    const parsedTx = await connection.getParsedTransaction(signature, {
+      commitment: 'confirmed',
+      maxSupportedTransactionVersion: 0,
+    });
+
+    if (!parsedTx) {
+      return { valid: false, data: null };
+    }
+
+    let memoData = null;
+    const instructions = parsedTx.transaction.message.instructions;
+    for (const ix of instructions) {
+      if ('programId' in ix && ix.programId.equals(MEMO_PROGRAM_ID)) {
+        memoData = 'parsed' in ix ? ix.parsed : ix.data;
+      }
+    }
+
+    return { valid: true, data: memoData };
+  } catch (err) {
+    console.error('[Solana] Error verificando recibo (cluster):', err);
+    return { valid: false, data: null };
+  }
+}
+
+/**
  * Retorna el recibo solana asociado a una sesión.
  */
 export async function getReciboBySession(sessionId: string): Promise<SolanaReceipt | null> {
@@ -95,7 +147,7 @@ export async function getReciboBySession(sessionId: string): Promise<SolanaRecei
   // Mapear al tipo frontend
   return {
     signature: data.signature,
-    cluster: data.cluster as 'devnet' | 'mainnet-beta',
+    cluster: data.cluster as 'devnet' | 'testnet' | 'mainnet-beta',
     explorerUrl: data.explorer_url,
     emittedAt: new Date(data.emitted_at),
     programId: data.program_id ?? undefined

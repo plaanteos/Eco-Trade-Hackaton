@@ -4,7 +4,7 @@ import { SolanaReceipt } from '../components/editorial/SolanaReceipt';
 import { EvidenceHash } from '../components/editorial/EvidenceHash';
 import { CarbonImpactBadge } from '../components/editorial/CarbonImpactBadge';
 import { getPublicSession } from '@/lib/sessions';
-import { verificarReciboPublico } from '@/lib/solana';
+import { verificarReciboPublicoEnCluster } from '@/lib/solana';
 import { PublicSessionData } from '@/lib/sessions';
 import { MapPin, Calendar, Clock, Package, Shield, Loader2, Leaf, ExternalLink } from 'lucide-react';
 
@@ -23,7 +23,10 @@ const PublicVerification: React.FC = () => {
         
         if (data?.solanaReceipt?.signature) {
           setChainStatus('checking');
-          const verification = await verificarReciboPublico(data.solanaReceipt.signature);
+          const verification = await verificarReciboPublicoEnCluster(
+            data.solanaReceipt.signature,
+            data.solanaReceipt.cluster
+          );
           setChainStatus(verification.valid ? 'valid' : 'invalid');
         } else {
           setChainStatus('missing');
@@ -69,6 +72,7 @@ const PublicVerification: React.FC = () => {
   const isValidOnChain = chainStatus === 'valid';
   const isChecking = chainStatus === 'checking';
   const isInvalid = chainStatus === 'invalid';
+  const clusterLabel = receipt.cluster;
 
   return (
     <div className="min-h-screen bg-[#F5F3ED]">
@@ -82,9 +86,9 @@ const PublicVerification: React.FC = () => {
           </h1>
           <p className="text-sm text-[#E8E6DD]">
             {isChecking
-              ? 'Verificando transacción en Solana (devnet)…'
+              ? `Verificando transacción en Solana (${clusterLabel})…`
               : isValidOnChain
-                ? 'Este recibo ha sido verificado y emitido en Solana blockchain (devnet).'
+                ? `Este recibo ha sido verificado y emitido en Solana blockchain (${clusterLabel}).`
                 : 'Este recibo está registrado, pero la transacción aún no aparece confirmada en Solana.'}
           </p>
         </div>

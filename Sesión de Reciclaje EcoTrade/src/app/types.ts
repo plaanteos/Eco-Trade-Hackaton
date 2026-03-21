@@ -35,7 +35,7 @@ export interface TrustScore {
 
 export interface SolanaReceipt {
   signature: string;
-  cluster: 'devnet' | 'mainnet-beta';
+  cluster: 'devnet' | 'testnet' | 'mainnet-beta';
   explorerUrl: string;
   emittedAt: Date;
   programId?: string;

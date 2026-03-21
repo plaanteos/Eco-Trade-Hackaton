@@ -21,7 +21,7 @@ import { createClient } from '@supabase/supabase-js';
 
 // ── Constantes ────────────────────────────────────────────────
 const MEMO_PROGRAM_ID = new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr');
-type SolanaCluster = 'devnet' | 'mainnet-beta';
+type SolanaCluster = 'devnet' | 'testnet' | 'mainnet-beta';
 const CLUSTER: SolanaCluster =
   (getFirstEnv('SOLANA_NETWORK', 'VITE_SOLANA_NETWORK') as SolanaCluster | undefined) || 'devnet';
 
@@ -43,11 +43,14 @@ const RPC_URL =
       : `https://solana-devnet.g.alchemy.com/v2/${ALCHEMY_KEY}`
     : CLUSTER === 'mainnet-beta'
       ? 'https://api.mainnet-beta.solana.com'
-      : 'https://api.devnet.solana.com');
+      : CLUSTER === 'testnet'
+        ? 'https://api.testnet.solana.com'
+        : 'https://api.devnet.solana.com');
 
 function guessRpcCluster(rpcUrl: string): SolanaCluster | null {
   const u = rpcUrl.toLowerCase();
   if (u.includes('mainnet')) return 'mainnet-beta';
+  if (u.includes('testnet')) return 'testnet';
   if (u.includes('devnet')) return 'devnet';
   return null;
 }
@@ -116,9 +119,20 @@ async function ensureFunds(
 
   if (balance0 >= minLamports) return;
 
-  if (cluster !== 'devnet') {
+  if (cluster !== 'devnet' && cluster !== 'testnet') {
     throw new Error(
       `Wallet sin saldo para fees en ${cluster}. Fondea ${pubkey.toBase58()} y reintenta.`
+    );
+  }
+
+  // En Vercel, el airdrop suele fallar por rate limits (IP compartida).
+  // Es más confiable fondear desde tu máquina (CLI/faucet) y luego emitir.
+  const runningOnVercel = Boolean(process.env.VERCEL || process.env.VERCEL_ENV);
+  if (runningOnVercel) {
+    throw new Error(
+      `Wallet sin saldo en ${cluster} (balance=${balance0}). ` +
+        `Fondea manualmente ${pubkey.toBase58()} en ${cluster} (CLI o https://faucet.solana.com) y reintenta. ` +
+        `Nota: el airdrop desde Vercel suele estar rate-limited.`
     );
   }
 
@@ -148,8 +162,8 @@ async function ensureFunds(
   const balanceFinal = await connection.getBalance(pubkey, 'confirmed');
   if (balanceFinal < minLamports) {
     throw new Error(
-      `No se pudo fondear la wallet en devnet (balance=${balanceFinal}). ` +
-        `Fondea manualmente ${pubkey.toBase58()} (devnet) y reintenta. ` +
+      `No se pudo fondear la wallet en ${cluster} (balance=${balanceFinal}). ` +
+        `Fondea manualmente ${pubkey.toBase58()} (${cluster}) y reintenta. ` +
         `RPC: ${RPC_URL}. Último error airdrop: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`
     );
   }
@@ -250,7 +264,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // 4. Obtener fondos si es necesario
-    if (CLUSTER === 'devnet') {
+    if (CLUSTER === 'devnet' || CLUSTER === 'testnet') {
       const minLamports = Number(getFirstEnv('SOLANA_MIN_BALANCE_LAMPORTS') ?? 5_000_000);
       await ensureFunds(connection, keypair.publicKey, { cluster: CLUSTER, minLamports });
     }
@@ -305,7 +319,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const explorerUrl =
       CLUSTER === 'devnet'
         ? `https://explorer.solana.com/tx/${signature}?cluster=devnet`
-        : `https://explorer.solana.com/tx/${signature}`;
+        : CLUSTER === 'testnet'
+          ? `https://explorer.solana.com/tx/${signature}?cluster=testnet`
+          : `https://explorer.solana.com/tx/${signature}`;
     const programId = MEMO_PROGRAM_ID.toBase58();
 
     const { error: rpcError } = await supabase.rpc('insert_solana_receipt', {

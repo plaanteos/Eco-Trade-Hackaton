@@ -271,10 +271,17 @@ function mapTrustScore(raw: RawTrustScore | null): TrustScore | undefined {
 
 function mapSolanaReceipt(raw: RawSolanaReceipt | null): SolanaReceipt | undefined {
   if (!raw) return undefined;
+  const cluster = raw.cluster as 'devnet' | 'testnet' | 'mainnet-beta';
+  const fallbackExplorerUrl =
+    cluster === 'devnet'
+      ? `https://explorer.solana.com/tx/${raw.signature}?cluster=devnet`
+      : cluster === 'testnet'
+        ? `https://explorer.solana.com/tx/${raw.signature}?cluster=testnet`
+        : `https://explorer.solana.com/tx/${raw.signature}`;
   return {
     signature: raw.signature,
-    cluster: raw.cluster as "devnet" | "mainnet-beta",
-    explorerUrl: raw.explorer_url ?? `https://explorer.solana.com/tx/${raw.signature}?cluster=devnet`,
+    cluster,
+    explorerUrl: raw.explorer_url ?? fallbackExplorerUrl,
     emittedAt: new Date(raw.emitted_at),
     programId: raw.program_id ?? undefined,
   };
