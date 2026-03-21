@@ -10,7 +10,9 @@ export default defineConfig({
     // Tailwind is not being actively used – do not remove them
     react(),
     tailwindcss(),
-    nodePolyfills(),
+    nodePolyfills({
+      include: ['buffer'], // ONLY polyfill Buffer to prevent Supabase 'fetch' from breaking by confusing it with Node.js
+    }),
   ],
   resolve: {
     alias: {
