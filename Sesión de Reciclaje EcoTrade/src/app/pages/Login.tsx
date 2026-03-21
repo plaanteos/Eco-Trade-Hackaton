@@ -117,7 +117,12 @@ const Login: React.FC = () => {
     const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
     if (signInError) {
       alert("Error ingresando como operador: " + signInError.message + "\nSi no tienes cuenta, crea una o ve a Supabase.");
+      setOpLoading(false);
+      return;
     }
+    // Redirigir de inmediato al dashboard de operador.
+    // El rol se actualizará cuando syncSession termine.
+    navigate('/operador/cola', { replace: true });
     setOpLoading(false);
   };
 

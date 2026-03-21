@@ -33,6 +33,11 @@ AS $$
   END;
 $$;
 
+-- Evitar que RLS se aplique dentro de estas funciones SECURITY DEFINER.
+-- Esto previene errores como:
+--   "infinite recursion detected in policy for relation \"profiles\""
+ALTER FUNCTION public.get_user_role() SET row_security = off;
+
 -- Alias booleano de conveniencia (más legible en políticas)
 CREATE OR REPLACE FUNCTION public.is_operator()
 RETURNS BOOLEAN
@@ -52,6 +57,8 @@ AS $$
   END;
 $$;
 
+ALTER FUNCTION public.is_operator() SET row_security = off;
+
 
 -- ============================================================
 -- TABLA: profiles
@@ -67,11 +74,14 @@ CREATE POLICY "profiles_select_own"
   USING (auth.uid() = id);
 
 -- Un operador puede ver TODOS los perfiles.
-CREATE POLICY "profiles_select_operator"
-  ON public.profiles
-  FOR SELECT
-  TO authenticated
-  USING (public.is_operator());
+-- NOTA:
+--  No creamos una policy "select all" para Operador aquí porque
+--  referenciar public.is_operator() en policies de profiles causa recursión.
+--  Si necesitas lectura global de perfiles, implementa un endpoint/backend con
+--  service_role o una vista/función específica sin depender de policies sobre profiles.
+
+-- En instalaciones existentes, eliminar la policy recursiva si está presente.
+DROP POLICY IF EXISTS "profiles_select_operator" ON public.profiles;
 
 -- ── INSERT ───────────────────────────────────────────────────
 -- Solo al registrarse: auth.uid() deve coincidir con el id
