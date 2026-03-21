@@ -62,6 +62,7 @@ const Login: React.FC = () => {
     const params = new URLSearchParams(location.search);
     const code = params.get('code');
     const errorDescription = params.get('error_description') ?? params.get('error');
+    const hasHashTokens = typeof location.hash === 'string' && (location.hash.includes('access_token=') || location.hash.includes('refresh_token='));
 
     void (async () => {
       try {
@@ -72,6 +73,18 @@ const Login: React.FC = () => {
         if (code) {
           const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
           if (exchangeError) throw exchangeError;
+        } else if (hasHashTokens && 'getSessionFromUrl' in supabase.auth) {
+          // Implicit flow (access_token en URL hash)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const fn = (supabase.auth as any).getSessionFromUrl as undefined | ((opts: { storeSession: boolean }) => Promise<{ data?: unknown; error?: unknown }>);
+          if (fn) {
+            const res = await fn({ storeSession: true });
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const e = (res as any)?.error;
+            if (e) throw e;
+          } else {
+            await supabase.auth.getSession();
+          }
         } else {
           // Fallback (por si el proveedor usa otro modo de retorno)
           await supabase.auth.getSession();
