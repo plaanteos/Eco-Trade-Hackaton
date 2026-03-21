@@ -52,6 +52,10 @@ function guessRpcCluster(rpcUrl: string): SolanaCluster | null {
   return null;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // ── Helper: base58 (sin dependencia extra) ───────────────────
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 
@@ -100,19 +104,54 @@ function getOperatorKeypair(): Keypair {
 }
 
 // ── Asegurar fondos (airdrop si balance bajo) ─────────────────
-async function ensureFunds(connection: Connection, pubkey: PublicKey): Promise<void> {
-  const balance = await connection.getBalance(pubkey, 'confirmed');
-  console.log(`[Solana API] Balance de ${pubkey.toBase58()}: ${balance} lamports`);
+async function ensureFunds(
+  connection: Connection,
+  pubkey: PublicKey,
+  options: { cluster: SolanaCluster; minLamports: number }
+): Promise<void> {
+  const { cluster, minLamports } = options;
 
-  if (balance >= 5_000_000) return; // 0.005 SOL es suficiente
+  const balance0 = await connection.getBalance(pubkey, 'confirmed');
+  console.log(`[Solana API] Balance de ${pubkey.toBase58()}: ${balance0} lamports`);
 
+  if (balance0 >= minLamports) return;
+
+  if (cluster !== 'devnet') {
+    throw new Error(
+      `Wallet sin saldo para fees en ${cluster}. Fondea ${pubkey.toBase58()} y reintenta.`
+    );
+  }
+
+  // En devnet intentamos airdrop con reintentos (puede fallar por rate limit o RPC inestable)
   console.log('[Solana API] Solicitando airdrop...');
-  try {
-    const sig = await connection.requestAirdrop(pubkey, 1_000_000_000);
-    await connection.confirmTransaction(sig, 'confirmed');
-    console.log('[Solana API] Airdrop confirmado');
-  } catch (err) {
-    console.warn('[Solana API] Airdrop falló, intentando continuar:', err);
+  const airdropLamports = Number(getFirstEnv('SOLANA_AIRDROP_LAMPORTS') ?? 200_000_000); // 0.2 SOL
+  let lastErr: unknown = null;
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const sig = await connection.requestAirdrop(pubkey, airdropLamports);
+      await connection.confirmTransaction(sig, 'confirmed');
+      await sleep(800 * attempt);
+      const balanceN = await connection.getBalance(pubkey, 'confirmed');
+      console.log(`[Solana API] Balance post-airdrop: ${balanceN} lamports`);
+      if (balanceN >= minLamports) {
+        console.log('[Solana API] Airdrop confirmado');
+        return;
+      }
+    } catch (err) {
+      lastErr = err;
+      console.warn(`[Solana API] Airdrop intento ${attempt} falló:`, err);
+      await sleep(900 * attempt);
+    }
+  }
+
+  const balanceFinal = await connection.getBalance(pubkey, 'confirmed');
+  if (balanceFinal < minLamports) {
+    throw new Error(
+      `No se pudo fondear la wallet en devnet (balance=${balanceFinal}). ` +
+        `Fondea manualmente ${pubkey.toBase58()} (devnet) y reintenta. ` +
+        `RPC: ${RPC_URL}. Último error airdrop: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`
+    );
   }
 }
 
@@ -212,7 +251,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 4. Obtener fondos si es necesario
     if (CLUSTER === 'devnet') {
-      await ensureFunds(connection, keypair.publicKey);
+      const minLamports = Number(getFirstEnv('SOLANA_MIN_BALANCE_LAMPORTS') ?? 5_000_000);
+      await ensureFunds(connection, keypair.publicKey, { cluster: CLUSTER, minLamports });
     }
 
     // 5. Construir transacción
@@ -229,10 +269,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     tx.sign(keypair);
 
     // 6. Enviar y confirmar
-    const signature = await connection.sendRawTransaction(tx.serialize(), {
-      skipPreflight: false,
-      preflightCommitment: 'confirmed',
-    });
+    let signature = '';
+    try {
+      signature = await connection.sendRawTransaction(tx.serialize(), {
+        skipPreflight: false,
+        preflightCommitment: 'confirmed',
+      });
+    } catch (err: any) {
+      // web3.js recomienda getLogs() para detalles de simulación
+      if (err && typeof err.getLogs === 'function') {
+        try {
+          const logs = await err.getLogs(connection);
+          console.error('[Solana API] Tx simulation logs:', logs);
+        } catch (logsErr) {
+          console.error('[Solana API] No se pudieron obtener logs de simulación:', logsErr);
+        }
+      }
+      throw err;
+    }
 
     console.log('[Solana API] Tx enviada:', signature);
 
