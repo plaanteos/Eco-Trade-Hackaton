@@ -12,10 +12,11 @@ const CreateSessionSummary: React.FC = () => {
 
   // Redirect if prerequisites are missing
   useEffect(() => {
+    if (isSubmitting) return;
     if (!draft.point || !draft.scheduledDate || draft.materials.length === 0) {
       navigate('/crear/punto');
     }
-  }, [draft.point, draft.scheduledDate, draft.materials.length, navigate]);
+  }, [draft.point, draft.scheduledDate, draft.materials.length, isSubmitting, navigate]);
 
   if (!draft.point || !draft.scheduledDate || draft.materials.length === 0) {
     return null;

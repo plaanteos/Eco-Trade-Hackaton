@@ -11,10 +11,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { MapPin, Calendar, Clock, Package, Download, XCircle, Edit, RefreshCw, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
 import { getSessionById, cancelSession as apiCancelSession } from '@/lib/sessions';
 import { RecyclingSession } from '@/app/types';
+import { useAuth } from '../context/AuthContext';
 
 const SessionDetail: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { role } = useAuth();
+  const isOperador = role === 'Operador';
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [cancellationReason, setCancellationReason] = useState('');
   
@@ -339,7 +342,7 @@ const SessionDetail: React.FC = () => {
           )}
 
           {/* Quick actions */}
-          {session.status === 'Completada' && (
+          {session.status === 'Completada' && !isOperador && (
             <Callout title="Repetir Sesión" variant="success">
               <p className="text-sm mb-4">
                 ¿Tienes más materiales? Crea una sesión similar con los mismos datos.

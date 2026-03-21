@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { SessionCard } from '../components/editorial/SessionCard';
 import { EditorialButton } from '../components/editorial/EditorialButton';
 import { useSession } from '../context/SessionContext';
+import { useAuth } from '../context/AuthContext';
 import { SessionStatus } from '../types';
 import { Search, Filter, Loader2 } from 'lucide-react';
 
@@ -12,6 +13,8 @@ const History: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   
   const { sessions, isLoading } = useSession();
+  const { role } = useAuth();
+  const isOperador = role === 'Operador';
 
   const filteredSessions = sessions.filter(session => {
     const matchesStatus = statusFilter === 'Todas' || session.status === statusFilter;
@@ -43,13 +46,15 @@ const History: React.FC = () => {
               Consulta todas tus sesiones de reciclaje, su estado y ecoCoins ganados.
             </p>
           </div>
-          <EditorialButton 
-            variant="primary" 
-            size="lg"
-            onClick={() => navigate('/crear/punto')}
-          >
-            Nueva Sesión
-          </EditorialButton>
+          {!isOperador && (
+            <EditorialButton 
+              variant="primary" 
+              size="lg"
+              onClick={() => navigate('/crear/punto')}
+            >
+              Nueva Sesión
+            </EditorialButton>
+          )}
         </div>
       </div>
 
@@ -107,7 +112,7 @@ const History: React.FC = () => {
               ? 'Intenta ajustar los filtros de búsqueda'
               : 'Aún no has creado ninguna sesión de reciclaje'}
           </p>
-          {searchTerm === '' && statusFilter === 'Todas' && (
+          {searchTerm === '' && statusFilter === 'Todas' && !isOperador && (
             <EditorialButton 
               variant="primary"
               onClick={() => navigate('/crear/punto')}
