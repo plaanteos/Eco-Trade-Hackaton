@@ -1,0 +1,10 @@
+{
+  "name": "ecotrade-vercel-wrapper",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "npm --prefix \"../Sesión de Reciclaje EcoTrade\" install && npm --prefix \"../Sesión de Reciclaje EcoTrade\" run build && node ./scripts/sync-dist.mjs",
+    "vercel-build": "npm run build"
+  }
+}
