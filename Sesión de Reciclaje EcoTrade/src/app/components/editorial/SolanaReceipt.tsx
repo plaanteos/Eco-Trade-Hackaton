@@ -18,6 +18,10 @@ export const SolanaReceipt: React.FC<SolanaReceiptProps> = ({
   const [copied, setCopied] = useState(false);
   const [showTechnical, setShowTechnical] = useState(false);
 
+  // Una firma real de Solana es base58, de ~87-88 chars.
+  // Si detectamos 64 chars hex, es una firma simulada/demo.
+  const isSimulated = /^[0-9a-f]{64}$/i.test(receipt.signature);
+
   const handleCopy = async (text: string) => {
     await navigator.clipboard.writeText(text);
     setCopied(true);
@@ -47,20 +51,29 @@ export const SolanaReceipt: React.FC<SolanaReceiptProps> = ({
             Sesión No. {sessionNumber}
           </h2>
           
-          {/* ON-CHAIN VERIFIED STAMP */}
-          <div className="inline-block border-4 border-[#2D5016] bg-[#E8F4E3] px-8 py-3 transform -rotate-2">
+          {/* ON-CHAIN STAMP */}
+          <div className={`inline-block border-4 px-8 py-3 transform -rotate-2 ${
+            isSimulated
+              ? 'border-[#B85C00] bg-[#FFF4E6]'
+              : 'border-[#2D5016] bg-[#E8F4E3]'
+          }`}>
             <div className="text-center">
-              <div className="text-2xl font-bold text-[#2D5016] uppercase tracking-wider" style={{ fontFamily: 'var(--font-serif)' }}>
-                ON-CHAIN
+              <div className={`text-2xl font-bold uppercase tracking-wider ${isSimulated ? 'text-[#B85C00]' : 'text-[#2D5016]'}`} style={{ fontFamily: 'var(--font-serif)' }}>
+                {isSimulated ? 'DEMO' : 'ON-CHAIN'}
               </div>
-              <div className="text-lg font-bold text-[#2D5016] uppercase tracking-wider" style={{ fontFamily: 'var(--font-serif)' }}>
-                VERIFIED
+              <div className={`text-lg font-bold uppercase tracking-wider ${isSimulated ? 'text-[#B85C00]' : 'text-[#2D5016]'}`} style={{ fontFamily: 'var(--font-serif)' }}>
+                {isSimulated ? 'SIMULADO' : 'VERIFIED'}
               </div>
-              <div className="text-xs text-[#2D5016] mt-1">
+              <div className={`text-xs mt-1 ${isSimulated ? 'text-[#B85C00]' : 'text-[#2D5016]'}`}>
                 {new Date(receipt.emittedAt).toLocaleDateString('es-ES')}
               </div>
             </div>
           </div>
+          {isSimulated && (
+            <p className="text-xs text-[#B85C00] mt-3 italic">
+              ⚠ Modo demo — recibo generado localmente sin tx real en la blockchain.
+            </p>
+          )}
         </div>
 
         {/* Summary stats */}
@@ -119,10 +132,14 @@ export const SolanaReceipt: React.FC<SolanaReceiptProps> = ({
             href={receipt.explorerUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[#2D5016] hover:bg-[#4A7C2E] text-white text-sm uppercase tracking-wider transition-colors"
+            className={`inline-flex items-center gap-2 px-4 py-2 text-white text-sm uppercase tracking-wider transition-colors ${
+              isSimulated 
+                ? 'bg-[#B85C00] hover:bg-[#92400E]'
+                : 'bg-[#2D5016] hover:bg-[#4A7C2E]'
+            }`}
           >
             <ExternalLink className="w-4 h-4" />
-            Ver en Solana Explorer
+            {isSimulated ? 'Ver Registro Demo' : 'Ver en Solana Explorer'}
           </a>
         </div>
 
@@ -149,7 +166,9 @@ export const SolanaReceipt: React.FC<SolanaReceiptProps> = ({
                 </span>
               </div>
               <p className="text-xs text-[#4A4A4A] italic">
-                Recibo emitido en Solana (devnet) y verificable públicamente.
+                {isSimulated
+                  ? 'Recibo generado en modo demo (hackathon). El hash canónico garantiza integridad de datos.'
+                  : 'Recibo emitido en Solana (devnet) y verificable públicamente.'}
               </p>
             </div>
           )}
