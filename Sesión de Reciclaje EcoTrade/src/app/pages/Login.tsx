@@ -44,9 +44,55 @@ const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [opLoading, setOpLoading] = useState(false);
+  const [callbackLoading, setCallbackLoading] = useState(false);
+  const [callbackError, setCallbackError] = useState<string | null>(null);
 
   // Destino de redirección tras login (o por defecto según role)
   const from = (location.state as { from?: string } | null)?.from;
+
+  // Finalizar OAuth callback (PKCE) cuando volvemos desde Google.
+  // Si redireccionamos antes de canjear el `code`, la sesión nunca se establece.
+  useEffect(() => {
+    if (location.pathname !== '/auth/callback') return;
+
+    let cancelled = false;
+    setCallbackError(null);
+    setCallbackLoading(true);
+
+    const params = new URLSearchParams(location.search);
+    const code = params.get('code');
+    const errorDescription = params.get('error_description') ?? params.get('error');
+
+    void (async () => {
+      try {
+        if (errorDescription) {
+          throw new Error(errorDescription);
+        }
+
+        if (code) {
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          if (exchangeError) throw exchangeError;
+        } else {
+          // Fallback (por si el proveedor usa otro modo de retorno)
+          await supabase.auth.getSession();
+        }
+
+        // Limpiar query params del callback para evitar re-intentos.
+        if (!cancelled) {
+          navigate('/login', { replace: true, state: location.state });
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Error procesando el callback de Google';
+        if (!cancelled) setCallbackError(message);
+      } finally {
+        if (!cancelled) setCallbackLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [location.pathname, location.search, navigate, location.state]);
 
   // Si ya está autenticado, redirigir inmediatamente
   useEffect(() => {
@@ -72,6 +118,9 @@ const Login: React.FC = () => {
     }
     setOpLoading(false);
   };
+
+  const busy = isLoading || callbackLoading;
+  const uiError = callbackError ?? error;
 
   // ── Render ────────────────────────────────────────────────
   return (
@@ -125,7 +174,7 @@ const Login: React.FC = () => {
           </div>
 
           {/* Error */}
-          {error && (
+          {uiError && (
             <div
               className="flex items-start gap-3 p-4 mb-6"
               style={{
@@ -147,7 +196,7 @@ const Login: React.FC = () => {
                   No se pudo iniciar sesión
                 </p>
                 <p className="text-xs" style={{ color: '#7F1D1D' }}>
-                  {error}
+                  {uiError}
                 </p>
               </div>
             </div>
@@ -157,14 +206,14 @@ const Login: React.FC = () => {
           <button
             id="btn-google-login"
             onClick={handleGoogleLogin}
-            disabled={isLoading}
-            aria-busy={isLoading}
+            disabled={busy}
+            aria-busy={busy}
             className="w-full flex items-center justify-center gap-3 py-4 px-6 transition-all duration-150"
             style={{
-              backgroundColor: isLoading ? '#E8E6DD' : '#1A1A1A',
+              backgroundColor: busy ? '#E8E6DD' : '#1A1A1A',
               color: '#F5F3ED',
               border: '2px solid #1A1A1A',
-              cursor: isLoading ? 'not-allowed' : 'pointer',
+              cursor: busy ? 'not-allowed' : 'pointer',
               fontFamily: 'inherit',
               fontSize: '0.9rem',
               fontWeight: 600,
@@ -172,19 +221,19 @@ const Login: React.FC = () => {
               textTransform: 'uppercase',
             }}
             onMouseEnter={e => {
-              if (!isLoading) {
+              if (!busy) {
                 (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#2D5016';
                 (e.currentTarget as HTMLButtonElement).style.borderColor = '#2D5016';
               }
             }}
             onMouseLeave={e => {
-              if (!isLoading) {
+              if (!busy) {
                 (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#1A1A1A';
                 (e.currentTarget as HTMLButtonElement).style.borderColor = '#1A1A1A';
               }
             }}
           >
-            {isLoading ? (
+            {busy ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
                 <span>Conectando…</span>
@@ -230,13 +279,13 @@ const Login: React.FC = () => {
             </div>
             <button
               type="submit"
-              disabled={isLoading || opLoading}
+              disabled={busy || opLoading}
               className="w-full flex items-center justify-center gap-2 py-3 px-6 transition-all duration-150"
               style={{
                 backgroundColor: 'transparent',
                 color: '#1A1A1A',
                 border: '2px solid #1A1A1A',
-                cursor: (isLoading || opLoading) ? 'not-allowed' : 'pointer',
+                cursor: (busy || opLoading) ? 'not-allowed' : 'pointer',
                 fontFamily: 'inherit',
                 fontSize: '0.85rem',
                 fontWeight: 600,
@@ -244,13 +293,13 @@ const Login: React.FC = () => {
                 textTransform: 'uppercase',
               }}
               onMouseEnter={e => {
-                if (!isLoading && !opLoading) {
+                if (!busy && !opLoading) {
                   (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#1A1A1A';
                   (e.currentTarget as HTMLButtonElement).style.color = '#F5F3ED';
                 }
               }}
               onMouseLeave={e => {
-                if (!isLoading && !opLoading) {
+                if (!busy && !opLoading) {
                   (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent';
                   (e.currentTarget as HTMLButtonElement).style.color = '#1A1A1A';
                 }

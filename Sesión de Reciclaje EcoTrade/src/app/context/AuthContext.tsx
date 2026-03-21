@@ -46,7 +46,9 @@ export interface AuthContextType {
 }
 
 // ─── Rutas que NO requieren autenticación ─────────────────────
-const PUBLIC_PATHS = ['/login', '/verificar'];
+// Importante: /auth/callback debe ser pública para no interrumpir
+// el intercambio de sesión de OAuth (race condition con detectSessionInUrl).
+const PUBLIC_PATHS = ['/login', '/auth/callback', '/verificar'];
 
 // ─── Context ─────────────────────────────────────────────────
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
