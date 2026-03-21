@@ -21,7 +21,9 @@ import { createClient } from '@supabase/supabase-js';
 
 // ── Constantes ────────────────────────────────────────────────
 const MEMO_PROGRAM_ID = new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr');
-const CLUSTER = 'devnet';
+type SolanaCluster = 'devnet' | 'mainnet-beta';
+const CLUSTER: SolanaCluster =
+  (getFirstEnv('SOLANA_NETWORK', 'VITE_SOLANA_NETWORK') as SolanaCluster | undefined) || 'devnet';
 
 function getFirstEnv(...names: string[]): string | undefined {
   for (const name of names) {
@@ -36,8 +38,19 @@ const ALCHEMY_KEY = getFirstEnv('ALCHEMY_APIKEY');
 const RPC_URL =
   getFirstEnv('SOLANA_RPC_URL', 'VITE_SOLANA_RPC_URL') ||
   (ALCHEMY_KEY
-    ? `https://solana-devnet.g.alchemy.com/v2/${ALCHEMY_KEY}`
-    : 'https://api.devnet.solana.com');
+    ? CLUSTER === 'mainnet-beta'
+      ? `https://solana-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`
+      : `https://solana-devnet.g.alchemy.com/v2/${ALCHEMY_KEY}`
+    : CLUSTER === 'mainnet-beta'
+      ? 'https://api.mainnet-beta.solana.com'
+      : 'https://api.devnet.solana.com');
+
+function guessRpcCluster(rpcUrl: string): SolanaCluster | null {
+  const u = rpcUrl.toLowerCase();
+  if (u.includes('mainnet')) return 'mainnet-beta';
+  if (u.includes('devnet')) return 'devnet';
+  return null;
+}
 
 // ── Helper: base58 (sin dependencia extra) ───────────────────
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
@@ -137,6 +150,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
   try {
+    const rpcClusterGuess = guessRpcCluster(RPC_URL);
+    if (rpcClusterGuess && rpcClusterGuess !== CLUSTER) {
+      return res.status(500).json({
+        error:
+          `Configuración Solana inconsistente: SOLANA_NETWORK=${CLUSTER} pero el RPC parece ser ${rpcClusterGuess} (${new URL(RPC_URL).host}). ` +
+          `Ajusta SOLANA_RPC_URL/VITE_SOLANA_RPC_URL para ${CLUSTER} o cambia SOLANA_NETWORK.`,
+      });
+    }
+
     // 1. Cargar datos de la sesión
     const { data: session, error: fetchError } = await supabase
       .from('recycling_sessions')
@@ -181,9 +203,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const connection = new Connection(RPC_URL, 'confirmed');
     const keypair = getOperatorKeypair();
     console.log('[Solana API] Wallet:', keypair.publicKey.toBase58());
+    console.log('[Solana API] Cluster:', CLUSTER);
+    try {
+      console.log('[Solana API] RPC host:', new URL(RPC_URL).host);
+    } catch {
+      console.log('[Solana API] RPC:', RPC_URL);
+    }
 
     // 4. Obtener fondos si es necesario
-    await ensureFunds(connection, keypair.publicKey);
+    if (CLUSTER === 'devnet') {
+      await ensureFunds(connection, keypair.publicKey);
+    }
 
     // 5. Construir transacción
     const instruction = new TransactionInstruction({
@@ -218,7 +248,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('[Solana API] Tx confirmada:', signature);
 
     // 7. Guardar en DB
-    const explorerUrl = `https://explorer.solana.com/tx/${signature}?cluster=devnet`;
+    const explorerUrl =
+      CLUSTER === 'devnet'
+        ? `https://explorer.solana.com/tx/${signature}?cluster=devnet`
+        : `https://explorer.solana.com/tx/${signature}`;
     const programId = MEMO_PROGRAM_ID.toBase58();
 
     const { error: rpcError } = await supabase.rpc('insert_solana_receipt', {
