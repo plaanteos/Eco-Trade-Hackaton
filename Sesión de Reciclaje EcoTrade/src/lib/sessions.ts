@@ -400,6 +400,26 @@ export async function getUserSessions(userId: string): Promise<RecyclingSession[
   return (data as unknown as RawSession[]).map(mapSession);
 }
 
+/**
+ * Retorna todas las sesiones donde el operador está involucrado o deba revisar.
+ */
+export async function getOperatorSessions(operatorId: string): Promise<RecyclingSession[]> {
+  // Un operador debe ver:
+  // 1. Sesiones de cualquier usuario en estado 'Pendiente de verificación' (revisables por el punto/operador)
+  // 2. Sesiones que él mismo ha verificado o cancelado (operator_id == operatorId)
+  const { data, error } = await supabase
+    .from("recycling_sessions")
+    .select(FULL_SESSION_SELECT)
+    .or(`status.eq."Pendiente de verificación", operator_id.eq.${operatorId}`)
+    .order("updated_at", { ascending: false });
+
+  if (error) {
+    throw new Error(`[getOperatorSessions] ${error.message}`);
+  }
+
+  return (data as unknown as RawSession[]).map(mapSession);
+}
+
 // ────────────────────────────────────────────────────────────
 // 2. getSessionById
 // ────────────────────────────────────────────────────────────

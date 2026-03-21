@@ -30,6 +30,24 @@ async function getOperatorKeypair(operatorId: string): Promise<Keypair> {
   return Keypair.fromSeed(hashArray.slice(0, 32));
 }
 
+async function ensureDevnetFunds(pubkey: PublicKey): Promise<void> {
+  if (SOLANA_CLUSTER !== 'devnet') return;
+
+  // Fees are tiny, but a brand-new derived keypair will usually have 0 SOL.
+  // Airdrop once when needed.
+  const minLamports = 10_000_000; // 0.01 SOL
+  const balance = await connection.getBalance(pubkey, 'confirmed');
+  if (balance >= minLamports) return;
+
+  try {
+    const sig = await connection.requestAirdrop(pubkey, 1_000_000_000); // 1 SOL
+    await connection.confirmTransaction(sig, 'confirmed');
+  } catch (err) {
+    // If airdrop fails (rate limits), we still attempt the tx and let it fail with a clear error.
+    console.warn('[Solana] No se pudo hacer airdrop en devnet:', err);
+  }
+}
+
 /**
  * Emite un recibo Solana guardando la información de la sesión on-chain
  * a través del SPL Memo Program.
@@ -120,6 +138,7 @@ export async function emitirReciboSolana(sessionId: string): Promise<SolanaRecei
   try {
     // 3 y 4. Obtener wallet del operador (Keypair derivado)
     const operatorKeypair = await getOperatorKeypair(operatorId);
+    await ensureDevnetFunds(operatorKeypair.publicKey);
 
     // 5. Construir Transaction con instrucción al Memo Program
     const instruction = new TransactionInstruction({

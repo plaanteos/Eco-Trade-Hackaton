@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
 import { CollectionPoint, Material, RecyclingSession } from '../types';
 import { supabase } from '@/lib/supabase/client';
-import { getUserSessions } from '@/lib/sessions';
+import { getUserSessions, getOperatorSessions } from '@/lib/sessions';
 
 interface SessionDraft {
   point?: CollectionPoint;
@@ -61,8 +61,18 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
       setError(null);
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const userSessions = await getUserSessions(user.id);
-        setSessions(userSessions);
+        // Fetch role from profile since we need it here
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+
+        const dataSessions = profile?.role === 'Operador'
+          ? await getOperatorSessions(user.id)
+          : await getUserSessions(user.id);
+          
+        setSessions(dataSessions);
       } else {
         setSessions([]);
       }

@@ -24,7 +24,9 @@ const History: React.FC = () => {
     return matchesStatus && matchesSearch;
   });
 
-  const statuses: (SessionStatus | 'Todas')[] = ['Todas', 'Programada', 'En curso', 'Pendiente de verificación', 'Completada', 'Cancelada', 'Borrador'];
+  const statuses: (SessionStatus | 'Todas')[] = isOperador 
+    ? ['Todas', 'Pendiente de verificación', 'Completada', 'Cancelada']
+    : ['Todas', 'Programada', 'En curso', 'Pendiente de verificación', 'Completada', 'Cancelada', 'Borrador'];
 
   if (isLoading) {
     return (

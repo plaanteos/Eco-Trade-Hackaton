@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { EditorialButton } from '../components/editorial/EditorialButton';
 import { StatusBadge } from '../components/editorial/StatusBadge';
@@ -24,21 +24,27 @@ const SessionDetail: React.FC = () => {
   
   const [session, setSession] = useState<RecyclingSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const loadSession = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!id) return;
+    const silent = opts?.silent === true;
+    try {
+      if (silent) setIsRefreshing(true);
+      else setIsLoading(true);
+      const s = await getSessionById(id);
+      setSession(s);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      if (silent) setIsRefreshing(false);
+      else setIsLoading(false);
+    }
+  }, [id]);
 
   useEffect(() => {
-    async function load() {
-      if (!id) return;
-      try {
-        const s = await getSessionById(id);
-        setSession(s);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    load();
-  }, [id]);
+    loadSession();
+  }, [loadSession]);
 
   if (isLoading) {
     return (
@@ -224,6 +230,48 @@ const SessionDetail: React.FC = () => {
               </tfoot>
             </table>
           </div>
+
+          {/* Evidencia Fotográfica */}
+          {session.evidence && session.evidence.length > 0 && (
+            <div className="bg-white border-2 border-[#1A1A1A]">
+              <div className="p-6 border-b-2 border-[#1A1A1A]">
+                <h3 className="text-sm uppercase tracking-wider">Evidencia Fotográfica</h3>
+              </div>
+              <div className="p-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  {session.evidence.map((url, idx) => (
+                    <div key={idx} className="border-2 border-[#1A1A1A] p-1 bg-white aspect-square overflow-hidden group">
+                      <img 
+                        src={url} 
+                        alt={`Evidencia ${idx + 1}`} 
+                        className="w-full h-full object-cover transition-transform group-hover:scale-110 cursor-zoom-in"
+                        onClick={() => window.open(url, '_blank')}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* On-chain pending (completed but no receipt yet) */}
+          {session.status === 'Completada' && !session.solanaReceipt && (
+            <Callout title="Recibo On-Chain" variant="warning">
+              <p className="text-sm mb-4">
+                La sesión ya fue completada, pero el recibo en Solana aún no aparece.
+                Esto puede tardar unos segundos si se está confirmando la transacción.
+              </p>
+              <EditorialButton
+                variant="outline"
+                size="md"
+                onClick={() => loadSession({ silent: true })}
+                disabled={isRefreshing}
+                className="w-full"
+              >
+                {isRefreshing ? 'Actualizando…' : 'Actualizar'}
+              </EditorialButton>
+            </Callout>
+          )}
 
           {/* Solana Receipt (only for completed sessions) */}
           {session.status === 'Completada' && session.solanaReceipt && (

@@ -146,8 +146,14 @@ const Login: React.FC = () => {
             <Leaf className="w-10 h-10" style={{ color: '#2D5016' }} />
           </div>
 
+          <div className="mb-12 max-w-lg mx-auto text-center opacity-80">
+            <p className="text-xl italic leading-relaxed font-serif text-[#4A4A4A]">
+              “La basura no desaparece. Y en realidad nunca existió. Solo existe un sistema que todavía no aprendió a verla como recurso.”
+            </p>
+          </div>
+
           <h1
-            className="text-5xl mb-3 tracking-tight"
+            className="text-5xl mb-3 tracking-tight font-bold"
             style={{ fontFamily: 'var(--font-serif)', color: '#1A1A1A' }}
           >
             EcoTrade
