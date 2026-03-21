@@ -378,42 +378,6 @@ async function insertTimeline(
 // (the full weighted-signal engine that loads its own data from Supabase)
 
 // ────────────────────────────────────────────────────────────
-// HELPER INTERNO: Emitir recibo Solana (simulado en devnet)
-// ────────────────────────────────────────────────────────────
-
-async function emitirReciboSolana(
-  sessionId: string,
-  sessionNumber: string
-): Promise<void> {
-  // Devnet: genera firma determinística a partir del sessionId + timestamp
-  const encoder = new TextEncoder();
-  const data = encoder.encode(`ecotrade:solana:${sessionId}:${Date.now()}`);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const signature = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 88);
-
-  const explorerUrl = `https://explorer.solana.com/tx/${signature}?cluster=devnet`;
-
-  const { error } = await supabase.rpc("insert_solana_receipt", {
-    p_session_id: sessionId,
-    p_signature: signature,
-    p_cluster: "devnet",
-    p_explorer_url: explorerUrl,
-    p_program_id: null,
-  });
-
-  if (error) {
-    console.warn("[EcoTrade] insert_solana_receipt RPC warning:", error.message);
-  }
-
-  // Log para debug en hackathon
-  console.info(
-    `[EcoTrade] Recibo Solana devnet emitido para sesión ${sessionNumber}:`,
-    explorerUrl
-  );
-}
-
-// ────────────────────────────────────────────────────────────
 // 1. getUserSessions
 // ────────────────────────────────────────────────────────────
 
@@ -649,7 +613,15 @@ export async function finalizarSesion(
   await calculateAndSaveCarbonOffset(sessionId);
 
   // ── 4. Emitir recibo Solana ───────────────────────────────
-  await emitirReciboSolana(sessionId, sessionData.session_number);
+  try {
+    const { emitirReciboSolana } = await import('@/lib/solana');
+    await emitirReciboSolana(sessionId);
+  } catch (err) {
+    console.warn(
+      `[finalizarSesion] Warning emitiendo recibo on-chain para sesión ${sessionData.session_number}:`,
+      err
+    );
+  }
 
   // ── 5. Insertar en timeline ───────────────────────────────
   await insertTimeline(

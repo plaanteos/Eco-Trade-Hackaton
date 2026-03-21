@@ -9,6 +9,15 @@ const SOLANA_RPC_URL = 'https://api.devnet.solana.com';
 // Connection instance
 const connection = new Connection(SOLANA_RPC_URL, 'confirmed');
 
+async function sha256Hex(input: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(input);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
 /**
  * Deriva de forma determinística un Keypair desde el operatorId
  * (Simulación de Alchemy Account Abstraction localmente).
@@ -66,19 +75,39 @@ export async function emitirReciboSolana(sessionId: string): Promise<SolanaRecei
     throw new Error('[Solana] No se encontró el ID del operador que verificó.');
   }
 
-  // 2. Construir el payload del memo (JSON compacto)
+  // 2. Construir un payload compacto + hash canónico verificable.
+  //    Guardamos on-chain solo lo necesario: kg verificado, hash de evidencia,
+  //    CO2 evitado y quién verificó. Todo en JSON pequeño.
+  const emittedAtIso = new Date().toISOString();
+  const kgVerified = Number(session.verified_total_kg ?? 0);
+  const co2Kg = cf ? Number(cf.co2_avoided_kg) : 0;
+  const evidenceHash = session.evidence_hash || '';
+
+  const canonical = [
+    'EcoTrade',
+    'v1',
+    `sid:${session.id}`,
+    `sn:${session.session_number}`,
+    `kg:${kgVerified}`,
+    `co2:${co2Kg}`,
+    `evh:${evidenceHash}`,
+    `op:${operatorId}`,
+    `t:${emittedAtIso}`,
+  ].join('|');
+
+  const proof = await sha256Hex(canonical);
+
   const memoPayload = {
-    app: "EcoTrade",
-    v: "1",
-    session: session.session_number,
-    punto: puntoNombre,
-    fecha: session.scheduled_date || new Date().toISOString().split('T')[0],
-    totalKg: session.verified_total_kg || 0,
-    ecoCoins: session.eco_coins || 0,
-    evidenceHash: session.evidence_hash || "",
-    co2Kg: cf ? Number(cf.co2_avoided_kg) : 0,
-    trees: cf ? Number(cf.trees_equivalent) : 0,
-    verifiedBy: operatorId
+    app: 'EcoTrade',
+    v: 1,
+    sid: session.id,
+    sn: session.session_number,
+    kg: kgVerified,
+    co2: co2Kg,
+    evh: evidenceHash,
+    op: operatorId,
+    t: emittedAtIso,
+    proof,
   };
 
   const memoString = JSON.stringify(memoPayload);
@@ -129,21 +158,34 @@ export async function emitirReciboSolana(sessionId: string): Promise<SolanaRecei
       programId: MEMO_PROGRAM_ID.toBase58()
     };
 
-    // 8. Hacer upsert en solana_receipts con status 'confirmed'
-    const { error: upsertError } = await supabase
-      .from('solana_receipts')
-      .upsert({
-        session_id: sessionId,
-        signature: receipt.signature,
-        cluster: receipt.cluster,
-        explorer_url: receipt.explorerUrl,
-        program_id: receipt.programId,
-        emitted_at: receipt.emittedAt.toISOString(),
-        status: 'confirmed'
-      }, { onConflict: 'session_id' });
+    // 8. Guardar recibo en DB usando RPC SECURITY DEFINER (bypassa RLS)
+    const { error: rpcError } = await supabase.rpc('insert_solana_receipt', {
+      p_session_id: sessionId,
+      p_signature: receipt.signature,
+      p_cluster: receipt.cluster,
+      p_explorer_url: receipt.explorerUrl,
+      p_program_id: receipt.programId ?? null,
+    });
 
-    if (upsertError) {
-      console.warn('[Solana] Error guardando recibo confirmado en DB:', upsertError.message);
+    if (rpcError) {
+      console.warn('[Solana] insert_solana_receipt RPC warning:', rpcError.message);
+
+      // Fallback: intentar upsert directo si la RPC no está disponible
+      const { error: upsertError } = await supabase
+        .from('solana_receipts')
+        .upsert({
+          session_id: sessionId,
+          signature: receipt.signature,
+          cluster: receipt.cluster,
+          explorer_url: receipt.explorerUrl,
+          program_id: receipt.programId,
+          emitted_at: receipt.emittedAt.toISOString(),
+          status: 'confirmed',
+        }, { onConflict: 'session_id' });
+
+      if (upsertError) {
+        console.warn('[Solana] Error guardando recibo confirmado (fallback upsert):', upsertError.message);
+      }
     }
 
     // 9. Actualizar session con solana_receipt_id if applicable schema handles it
