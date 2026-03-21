@@ -7,19 +7,21 @@ import { Recycle, LogOut, User, Briefcase } from 'lucide-react';
 const Root: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout, isAuthenticated } = useAuth();
+  const { user, logout, isAuthenticated, isLoading } = useAuth();
 
   const isOperador = user?.role === 'Operador';
 
   // Redirect to login if not authenticated
   useEffect(() => {
+    if (isLoading) return;
+
     if (!isAuthenticated) {
       navigate('/login');
     } else if (isOperador && location.pathname === '/') {
       // Redirect operador to their dashboard
       navigate('/operador/cola');
     }
-  }, [isAuthenticated, navigate, isOperador, location.pathname]);
+  }, [isAuthenticated, isLoading, navigate, isOperador, location.pathname]);
 
   const handleLogout = async () => {
     await logout(); // logout() in AuthContext already navigates to /login
