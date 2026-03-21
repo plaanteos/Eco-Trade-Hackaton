@@ -54,30 +54,6 @@ function decodeBase58(str: string): Uint8Array {
   return Uint8Array.from(bytes.reverse());
 }
 
-function encodeBase58(bytes: Uint8Array): string {
-  const digits = [0];
-  for (const byte of bytes) {
-    let carry = byte;
-    for (let i = 0; i < digits.length; i++) {
-      carry += digits[i] * 256;
-      digits[i] = carry % 58;
-      carry = Math.floor(carry / 58);
-    }
-    while (carry > 0) {
-      digits.push(carry % 58);
-      carry = Math.floor(carry / 58);
-    }
-  }
-  let result = '';
-  for (let i = digits.length - 1; i >= 0; i--) {
-    result += BASE58_ALPHABET[digits[i]];
-  }
-  for (const byte of bytes) {
-    if (byte === 0) result = '1' + result;
-    else break;
-  }
-  return result;
-}
 
 // ── Obtener el wallet del operador ────────────────────────────
 function getOperatorKeypair(): Keypair {
