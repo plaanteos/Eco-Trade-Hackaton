@@ -1,17 +1,69 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useSession } from '../../context/SessionContext';
 import { EditorialButton } from '../../components/editorial/EditorialButton';
 import { Callout } from '../../components/editorial/Callout';
-import { COLLECTION_POINTS } from '../../data/mock-data';
 import { CollectionPoint, MaterialType } from '../../types';
 import { MapPin, Clock, Package, ChevronRight } from 'lucide-react';
+import { supabase } from '@/lib/supabase/client';
 
 const CreateSessionPoint: React.FC = () => {
   const navigate = useNavigate();
   const { draft, setPoint } = useSession();
   const [selectedPoint, setSelectedPoint] = useState<CollectionPoint | undefined>(draft.point);
   const [expandedPoint, setExpandedPoint] = useState<string | null>(null);
+  const [points, setPoints] = useState<CollectionPoint[]>([]);
+  const [pointsLoading, setPointsLoading] = useState(true);
+  const [pointsError, setPointsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPointsLoading(true);
+    setPointsError(null);
+
+    void (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('collection_points')
+          .select('id, name, address, schedule, accepted_materials, instructions, limits')
+          .eq('is_active', true)
+          .order('name', { ascending: true });
+
+        if (error) throw error;
+
+        const mapped: CollectionPoint[] = (data ?? []).map((row: any) => ({
+          id: row.id,
+          name: row.name,
+          address: row.address,
+          schedule: row.schedule,
+          acceptedMaterials: (row.accepted_materials ?? []) as MaterialType[],
+          instructions: row.instructions ?? undefined,
+          limits: row.limits ?? undefined,
+        }));
+
+        if (!cancelled) {
+          setPoints(mapped);
+          // Si el draft tenía un punto con ID mock (pt-001), lo deseleccionamos.
+          if (selectedPoint && !mapped.some(p => p.id === selectedPoint.id)) {
+            setSelectedPoint(undefined);
+            setExpandedPoint(null);
+          }
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'No se pudieron cargar los puntos de acopio.';
+        if (!cancelled) {
+          setPoints([]);
+          setPointsError(message);
+        }
+      } finally {
+        if (!cancelled) setPointsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPoint]);
 
   const handleContinue = () => {
     if (selectedPoint) {
@@ -52,7 +104,31 @@ const CreateSessionPoint: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Points list */}
         <div className="lg:col-span-2 space-y-4">
-          {COLLECTION_POINTS.map(point => (
+          {pointsLoading && (
+            <Callout title="Cargando" variant="info">
+              <p>Cargando puntos de acopio…</p>
+            </Callout>
+          )}
+
+          {!pointsLoading && pointsError && (
+            <Callout title="No se pudieron cargar los puntos" variant="warning">
+              <p>{pointsError}</p>
+              <p className="mt-2 text-xs">
+                Verifica que exista la tabla <strong>collection_points</strong> en Supabase y que tenga registros con <strong>is_active = true</strong>.
+              </p>
+            </Callout>
+          )}
+
+          {!pointsLoading && !pointsError && points.length === 0 && (
+            <Callout title="Sin puntos disponibles" variant="warning">
+              <p>No hay puntos de acopio activos configurados.</p>
+              <p className="mt-2 text-xs">
+                Crea al menos 1 registro en <strong>collection_points</strong> con <strong>is_active = true</strong> para poder continuar.
+              </p>
+            </Callout>
+          )}
+
+          {!pointsLoading && !pointsError && points.map(point => (
             <div
               key={point.id}
               className={`bg-white border-2 transition-all ${
