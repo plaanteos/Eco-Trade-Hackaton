@@ -98,10 +98,12 @@ const Login: React.FC = () => {
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    if (from) {
+    if (role === 'Operador') {
+      navigate('/operador/cola', { replace: true });
+    } else if (from && from !== '/login') {
       navigate(from, { replace: true });
     } else {
-      navigate(role === 'Operador' ? '/operador/cola' : '/', { replace: true });
+      navigate('/', { replace: true });
     }
   }, [isAuthenticated, navigate, from, role]);
 

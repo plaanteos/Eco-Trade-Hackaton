@@ -1,14 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { useSession } from '../../context/SessionContext';
 import { EditorialButton } from '../../components/editorial/EditorialButton';
 import { Callout } from '../../components/editorial/Callout';
-import { ChevronLeft, ChevronRight, Camera, FileText, Upload, ImageIcon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Upload, ImageIcon } from 'lucide-react';
 
 const CreateSessionEvidence: React.FC = () => {
   const navigate = useNavigate();
-  const { draft } = useSession();
+  const { draft, addEvidence } = useSession();
   const [evidenceNote, setEvidenceNote] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
 
   // Redirect if prerequisites are missing
   useEffect(() => {
@@ -17,6 +20,15 @@ const CreateSessionEvidence: React.FC = () => {
     }
   }, [draft.point, draft.scheduledDate, draft.materials.length, navigate]);
 
+  // Handle object URLs for previews to prevent memory leaks
+  useEffect(() => {
+    const urls = draft.evidence.map(file => URL.createObjectURL(file));
+    setPreviewUrls(urls);
+    return () => {
+      urls.forEach(url => URL.revokeObjectURL(url));
+    };
+  }, [draft.evidence]);
+
   if (!draft.point || !draft.scheduledDate || draft.materials.length === 0) {
     return null;
   }
@@ -24,6 +36,35 @@ const CreateSessionEvidence: React.FC = () => {
   const handleContinue = () => {
     // Evidence is optional, so we can continue regardless
     navigate('/crear/resumen');
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      addEvidence(Array.from(e.target.files));
+      // Reset input value to allow selecting the same file again if needed
+      e.target.value = '';
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      addEvidence(Array.from(e.dataTransfer.files));
+    }
+  };
+
+  const handleSelectClick = () => {
+    fileInputRef.current?.click();
   };
 
   return (
@@ -43,13 +84,32 @@ const CreateSessionEvidence: React.FC = () => {
         <div className="lg:col-span-2 space-y-6">
           {/* Upload area */}
           <div className="bg-white border-2 border-[#1A1A1A] p-8">
-            <div className="border-2 border-dashed border-[#4A4A4A] p-12 text-center">
-              <Upload className="w-16 h-16 text-[#4A4A4A] mx-auto mb-4" />
+            <div 
+              className={`border-2 border-dashed p-12 text-center transition-colors cursor-pointer ${
+                isDragging ? 'border-[#2D5016] bg-[#2D5016]/5' : 'border-[#4A4A4A]'
+              }`}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={handleSelectClick}
+            >
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                onChange={handleFileChange} 
+                className="hidden" 
+                multiple 
+                accept="image/jpeg, image/png, image/webp"
+              />
+              <Upload className={`w-16 h-16 mx-auto mb-4 ${isDragging ? 'text-[#2D5016]' : 'text-[#4A4A4A]'}`} />
               <h3 className="mb-2">Subir Fotografías</h3>
               <p className="text-sm text-[#4A4A4A] mb-6">
                 Arrastra archivos aquí o haz clic para seleccionar
               </p>
-              <EditorialButton variant="outline" size="md">
+              <EditorialButton variant="outline" size="md" onClick={(e) => {
+                e.stopPropagation();
+                handleSelectClick();
+              }}>
                 Seleccionar Archivos
               </EditorialButton>
               <p className="text-xs text-[#4A4A4A] mt-4">
@@ -77,10 +137,29 @@ const CreateSessionEvidence: React.FC = () => {
             <h3 className="mb-4 text-sm uppercase tracking-wider">
               Vista Previa
             </h3>
-            <div className="border border-[#E8E6DD] p-8 text-center text-[#4A4A4A]">
-              <ImageIcon className="w-12 h-12 mx-auto mb-2 opacity-30" />
-              <p className="text-sm">No se han subido fotografías aún</p>
-            </div>
+            {draft.evidence.length === 0 ? (
+              <div className="border border-[#E8E6DD] p-8 text-center text-[#4A4A4A]">
+                <ImageIcon className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">No se han subido fotografías aún</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                {draft.evidence.map((file, idx) => (
+                  <div key={idx} className="relative group border-2 border-[#1A1A1A] overflow-hidden aspect-square">
+                    <img 
+                      src={previewUrls[idx]} 
+                      alt={`Evidencia ${idx + 1}`} 
+                      className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                    />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <p className="text-white text-xs font-bold px-2 text-center truncate w-full">
+                        {file.name}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
