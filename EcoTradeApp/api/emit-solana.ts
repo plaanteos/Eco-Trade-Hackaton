@@ -28,7 +28,7 @@ const CLUSTER: SolanaCluster =
 function getFirstEnv(...names: string[]): string | undefined {
   for (const name of names) {
     const value = process.env[name];
-    if (value && value.trim().length > 0) return value;
+    if (value && value.trim().length > 0) return value.trim();
   }
   return undefined;
 }
@@ -65,6 +65,7 @@ const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvw
 function decodeBase58(str: string): Uint8Array {
   const bytes = [0];
   for (const char of str) {
+    if (/\s/.test(char)) continue;
     let carry = BASE58_ALPHABET.indexOf(char);
     if (carry < 0) throw new Error(`Invalid base58 char: ${char}`);
     for (let i = 0; i < bytes.length; i++) {
@@ -86,15 +87,26 @@ function decodeBase58(str: string): Uint8Array {
 
 // ── Obtener el wallet del operador ────────────────────────────
 function getOperatorKeypair(): Keypair {
-  const seed = process.env.SOLANA_OPERATOR_SEED;
+  const seed = getFirstEnv('SOLANA_OPERATOR_SEED');
   if (!seed) {
     throw new Error('SOLANA_OPERATOR_SEED environment variable not set');
   }
 
-  // Si la env var es la secret key completa (64 bytes en base58 ~88 chars)
-  if (seed.length > 60) {
+  // Soportar export común: JSON array de 64 bytes (por ejemplo desde algunas wallets)
+  const trimmed = seed.trim();
+  if (trimmed.startsWith('[')) {
     try {
-      const secretKey = decodeBase58(seed);
+      const arr = JSON.parse(trimmed);
+      if (Array.isArray(arr) && arr.length === 64 && arr.every((n) => Number.isInteger(n) && n >= 0 && n <= 255)) {
+        return Keypair.fromSecretKey(Uint8Array.from(arr));
+      }
+    } catch {}
+  }
+
+  // Si la env var es la secret key completa (64 bytes en base58 ~88 chars)
+  if (trimmed.length > 60) {
+    try {
+      const secretKey = decodeBase58(trimmed);
       if (secretKey.length === 64) {
         return Keypair.fromSecretKey(secretKey);
       }
@@ -102,7 +114,7 @@ function getOperatorKeypair(): Keypair {
   }
 
   // Si es una seed de 32 bytes (base58 ~43-44 chars), usarla directamente
-  const seedBytes = decodeBase58(seed);
+  const seedBytes = decodeBase58(trimmed);
   return Keypair.fromSeed(seedBytes.slice(0, 32));
 }
 
