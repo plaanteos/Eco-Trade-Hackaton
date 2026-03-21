@@ -8,7 +8,7 @@
 
 ---
 
-## 60-second demo (for judges)
+## Demo walkthrough (for judges)
 
 1) Open the live demo and log in with Google.
 2) Create a recycling session: point → date/time → materials (kg) → upload photo evidence → confirm.
@@ -186,5 +186,11 @@ SOLANA_OPERATOR_SEED=<base58 secret key from the generator>
 
 Built at **Aleph Hackathon 2026** 🇦🇷  
 Tracks: Best Projects (PL_Genesis) · Crypto Consumer Apps · AI/Emerging Tech
+
+## Pre-existing work disclosure
+The UI design was created in Figma Make before the hackathon.
+All backend logic — Supabase schema, Solana receipt emission, 
+Trust Score, Auth flow, and API layer — was built during the hackathon 
+from scratch.
 
 **Team:** Jesus Copes
