@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { MOCK_SESSIONS, generateSolanaReceipt, calculateEcoCoins } from '../data/mock-data';
-import { Material } from '../types';
+import { getReviewDetail, aprobarSesion, solicitarEvidencia, rechazarSesion, ReviewDetailData } from '@/lib/operator';
 import { EditorialButton } from '../components/editorial/EditorialButton';
 import { TrustScore } from '../components/editorial/TrustScore';
 import { Callout } from '../components/editorial/Callout';
@@ -10,16 +9,49 @@ import { MapPin, Calendar, Package, AlertTriangle, CheckCircle2, XCircle, Loader
 const OperatorReviewDetail: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const session = MOCK_SESSIONS.find(s => s.id === id);
 
-  const [verifiedMaterials, setVerifiedMaterials] = useState<Material[]>(
-    session?.materials.map(m => ({ ...m, verifiedKg: m.kg })) || []
-  );
+  const [detail, setDetail] = useState<ReviewDetailData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // States for verification
+  const [verifiedMaterials, setVerifiedMaterials] = useState<Record<string, number>>({});
   const [operatorNote, setOperatorNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [action, setAction] = useState<'approve' | 'request-evidence' | 'reject' | null>(null);
 
-  if (!session) {
+  useEffect(() => {
+    async function load() {
+      if (!id) return;
+      try {
+        const data = await getReviewDetail(id);
+        setDetail(data);
+
+        // Prep verification default state
+        const initialVerified: Record<string, number> = {};
+        data.reportedVsVerified.forEach(m => {
+          initialVerified[m.materialId] = m.verifiedKg ?? m.reportedKg;
+        });
+        setVerifiedMaterials(initialVerified);
+
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    load();
+  }, [id]);
+
+  if (isLoading) {
+    return (
+      <div className="max-w-5xl mx-auto px-6 py-16 text-center">
+        <Loader2 className="w-12 h-12 mx-auto animate-spin text-[#2D5016] mb-4" />
+        <p>Cargando sesión...</p>
+      </div>
+    );
+  }
+
+  if (!detail) {
     return (
       <div className="max-w-5xl mx-auto px-6 py-16 text-center">
         <h1 className="mb-4">Sesión No Encontrada</h1>
@@ -30,46 +62,57 @@ const OperatorReviewDetail: React.FC = () => {
     );
   }
 
-  const handleKgChange = (index: number, newKg: number) => {
-    const updated = [...verifiedMaterials];
-    updated[index] = { ...updated[index], verifiedKg: newKg };
-    setVerifiedMaterials(updated);
+  const { session, reportedVsVerified } = detail;
+
+  const handleKgChange = (materialId: string, newKg: number) => {
+    setVerifiedMaterials(prev => ({
+      ...prev,
+      [materialId]: newKg
+    }));
   };
 
-  const totalReportedKg = session.materials.reduce((sum, m) => sum + m.kg, 0);
-  const totalVerifiedKg = verifiedMaterials.reduce((sum, m) => sum + (m.verifiedKg || 0), 0);
-  const verifiedEcoCoins = calculateEcoCoins(totalVerifiedKg);
+  const totalReportedKg = session.totalKg;
+  const totalVerifiedKg = Object.values(verifiedMaterials).reduce((sum, kg) => sum + kg, 0);
+  const verifiedEcoCoins = Math.floor(totalVerifiedKg / 10);
 
   const handleSubmit = async (selectedAction: 'approve' | 'request-evidence' | 'reject') => {
+    if (!id) return;
     setAction(selectedAction);
     setIsSubmitting(true);
 
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    try {
+      if (selectedAction === 'approve') {
+        const payload = Object.entries(verifiedMaterials).map(([materialId, verifiedKg]) => ({
+          materialId,
+          verifiedKg,
+          verified: true
+        }));
+        await aprobarSesion(id, payload, operatorNote);
+      } else if (selectedAction === 'request-evidence') {
+        if (!operatorNote.trim()) {
+          alert("Debe escribir una nota solicitando evidencia adicional.");
+          return;
+        }
+        await solicitarEvidencia(id, operatorNote);
+      } else {
+        if (!operatorNote.trim()) {
+          alert("Debe escribir un motivo para rechazar la sesión.");
+          return;
+        }
+        await rechazarSesion(id, operatorNote, 'rechazar');
+      }
 
-    if (selectedAction === 'approve') {
-      // Would emit Solana receipt here
-      console.log('Approving and emitting Solana receipt', {
-        sessionId: session.id,
-        verifiedMaterials,
-        totalVerifiedKg,
-        verifiedEcoCoins,
-        operatorNote,
-        solanaReceipt: generateSolanaReceipt(session.id)
-      });
-    } else if (selectedAction === 'request-evidence') {
-      console.log('Requesting additional evidence', { sessionId: session.id, operatorNote });
-    } else {
-      console.log('Rejecting session', { sessionId: session.id, operatorNote });
+      navigate('/operador/cola');
+    } catch (err) {
+      console.error(err);
+      alert('Error en la operación.');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setIsSubmitting(false);
-    navigate('/operador/cola');
   };
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-16">
-      {/* Header */}
       <div className="border-b-4 border-[#1A1A1A] pb-8 mb-12">
         <button
           onClick={() => navigate('/operador/cola')}
@@ -98,12 +141,10 @@ const OperatorReviewDetail: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
-          {/* Trust Score Details */}
           {session.trustScore && (
             <TrustScore trustScore={session.trustScore} />
           )}
 
-          {/* Session info */}
           <div className="bg-white border-2 border-[#1A1A1A] p-6">
             <h2 className="text-sm uppercase tracking-wider font-bold mb-6 pb-4 border-b-2 border-[#1A1A1A]">
               Información de la Sesión
@@ -143,7 +184,6 @@ const OperatorReviewDetail: React.FC = () => {
             </div>
           </div>
 
-          {/* Comparison: Reported vs Verified */}
           <div className="bg-white border-2 border-[#1A1A1A]">
             <div className="p-6 border-b-2 border-[#1A1A1A] flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -158,45 +198,34 @@ const OperatorReviewDetail: React.FC = () => {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-[#E8E6DD] bg-[#E8E6DD]">
-                    <th className="text-left p-4 text-xs uppercase tracking-wider font-medium">
-                      Material
-                    </th>
-                    <th className="text-right p-4 text-xs uppercase tracking-wider font-medium">
-                      Reportado (KG)
-                    </th>
-                    <th className="text-right p-4 text-xs uppercase tracking-wider font-medium">
-                      Verificado (KG)
-                    </th>
-                    <th className="text-center p-4 text-xs uppercase tracking-wider font-medium">
-                      Diferencia
-                    </th>
+                    <th className="text-left p-4 text-xs uppercase tracking-wider font-medium">Material</th>
+                    <th className="text-right p-4 text-xs uppercase tracking-wider font-medium">Reportado (KG)</th>
+                    <th className="text-right p-4 text-xs uppercase tracking-wider font-medium">Verificado (KG)</th>
+                    <th className="text-center p-4 text-xs uppercase tracking-wider font-medium">Diferencia</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {verifiedMaterials.map((material, idx) => {
-                    const diff = (material.verifiedKg || 0) - material.kg;
-                    const diffPercent = material.kg > 0 ? (diff / material.kg) * 100 : 0;
+                  {reportedVsVerified.map((material, idx) => {
+                    const reported = material.reportedKg;
+                    const verified = verifiedMaterials[material.materialId] || 0;
+                    const diff = verified - reported;
+                    const diffPercent = reported > 0 ? (diff / reported) * 100 : 0;
                     
                     return (
                       <tr key={idx} className="border-b border-[#E8E6DD]">
                         <td className="p-4">
                           <div className="font-medium">{material.type}</div>
-                          {material.observation && (
-                            <div className="text-xs text-[#4A4A4A] italic mt-1">
-                              {material.observation}
-                            </div>
-                          )}
                         </td>
                         <td className="text-right p-4 font-medium">
-                          {material.kg.toFixed(1)}
+                          {reported.toFixed(1)}
                         </td>
                         <td className="p-4">
                           <input
                             type="number"
                             step="0.1"
                             min="0"
-                            value={material.verifiedKg || 0}
-                            onChange={(e) => handleKgChange(idx, parseFloat(e.target.value) || 0)}
+                            value={verified}
+                            onChange={(e) => handleKgChange(material.materialId, parseFloat(e.target.value) || 0)}
                             className="w-24 text-right px-3 py-2 border-2 border-[#1A1A1A] bg-white focus:outline-none focus:ring-2 focus:ring-[#2D5016] font-medium ml-auto block"
                           />
                         </td>
@@ -217,15 +246,9 @@ const OperatorReviewDetail: React.FC = () => {
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-[#1A1A1A] bg-[#E8E6DD]">
-                    <td className="p-4 font-bold uppercase tracking-wider">
-                      Total
-                    </td>
-                    <td className="text-right p-4 font-bold text-lg">
-                      {totalReportedKg.toFixed(1)}
-                    </td>
-                    <td className="text-right p-4 font-bold text-lg">
-                      {totalVerifiedKg.toFixed(1)}
-                    </td>
+                    <td className="p-4 font-bold uppercase tracking-wider">Total</td>
+                    <td className="text-right p-4 font-bold text-lg">{totalReportedKg.toFixed(1)}</td>
+                    <td className="text-right p-4 font-bold text-lg">{totalVerifiedKg.toFixed(1)}</td>
                     <td className="text-center p-4">
                       {totalVerifiedKg !== totalReportedKg && (
                         <span className={`inline-block px-3 py-1 border text-xs font-bold ${
@@ -243,7 +266,6 @@ const OperatorReviewDetail: React.FC = () => {
             </div>
           </div>
 
-          {/* Operator note */}
           <div className="bg-white border-2 border-[#1A1A1A] p-6">
             <label className="block mb-3 text-sm uppercase tracking-wider font-bold">
               Nota del Operador
@@ -251,7 +273,7 @@ const OperatorReviewDetail: React.FC = () => {
             <textarea
               value={operatorNote}
               onChange={(e) => setOperatorNote(e.target.value)}
-              placeholder="Agrega observaciones sobre la verificación, ajustes realizados o cualquier detalle relevante..."
+              placeholder="Agrega observaciones, ajustes realizados... Requerido para solicitar evidencia o rechazar."
               rows={4}
               className="w-full px-4 py-3 border-2 border-[#1A1A1A] bg-white focus:outline-none focus:ring-2 focus:ring-[#2D5016] resize-none"
             />
@@ -260,7 +282,6 @@ const OperatorReviewDetail: React.FC = () => {
 
         {/* Sidebar */}
         <div className="space-y-6">
-          {/* EcoCoins calculation */}
           <div className="bg-[#E8F4E3] border-2 border-[#2D5016] p-6">
             <div className="text-xs uppercase tracking-wider text-[#2D5016] mb-4">
               ecoCoins Verificados
@@ -275,7 +296,6 @@ const OperatorReviewDetail: React.FC = () => {
             </div>
           </div>
 
-          {/* Actions */}
           <div className="bg-white border-2 border-[#1A1A1A] p-6">
             <div className="text-sm uppercase tracking-wider font-bold mb-4">
               Decisión
@@ -290,16 +310,11 @@ const OperatorReviewDetail: React.FC = () => {
                 className="w-full flex items-center justify-center gap-2"
               >
                 {isSubmitting && action === 'approve' ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Emitiendo en Solana...
-                  </>
+                  <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
-                  <>
-                    <CheckCircle2 className="w-5 h-5" />
-                    Aprobar y Emitir en Solana
-                  </>
+                  <CheckCircle2 className="w-5 h-5" />
                 )}
+                Aprobar y Emitir en Solana
               </EditorialButton>
 
               <EditorialButton
@@ -310,16 +325,11 @@ const OperatorReviewDetail: React.FC = () => {
                 className="w-full flex items-center justify-center gap-2"
               >
                 {isSubmitting && action === 'request-evidence' ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Procesando...
-                  </>
+                  <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
-                  <>
-                    <AlertTriangle className="w-5 h-5" />
-                    Solicitar Evidencia
-                  </>
+                  <AlertTriangle className="w-5 h-5" />
                 )}
+                Solicitar Evidencia
               </EditorialButton>
 
               <EditorialButton
@@ -330,29 +340,14 @@ const OperatorReviewDetail: React.FC = () => {
                 className="w-full flex items-center justify-center gap-2 border-[#B91C1C] text-[#B91C1C] hover:bg-[#B91C1C] hover:text-white"
               >
                 {isSubmitting && action === 'reject' ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Procesando...
-                  </>
+                  <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
-                  <>
-                    <XCircle className="w-5 h-5" />
-                    Incidencia / Rechazar
-                  </>
+                  <XCircle className="w-5 h-5" />
                 )}
+                Incidencia / Rechazar
               </EditorialButton>
             </div>
           </div>
-
-          {/* Important notes */}
-          <Callout title="Importante" variant="info">
-            <ul className="text-sm space-y-2 list-disc list-inside">
-              <li>Verifica los KG exactos antes de aprobar</li>
-              <li>Los ecoCoins finales se calculan automáticamente</li>
-              <li>El recibo se emitirá en Solana devnet</li>
-              <li>La acción no se puede deshacer</li>
-            </ul>
-          </Callout>
         </div>
       </div>
     </div>

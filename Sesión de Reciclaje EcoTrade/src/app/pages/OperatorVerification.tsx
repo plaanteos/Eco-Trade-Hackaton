@@ -1,18 +1,60 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router';
+import { supabase } from '@/lib/supabase/client';
 import { EditorialButton } from '../components/editorial/EditorialButton';
 import { StatusBadge } from '../components/editorial/StatusBadge';
 import { Callout } from '../components/editorial/Callout';
-import { MOCK_SESSIONS, calculateEcoCoins } from '../data/mock-data';
-import { Material } from '../types';
-import { CheckCircle2, AlertTriangle, Stamp } from 'lucide-react';
+import { getSessionById } from '@/lib/sessions';
+import { iniciarSesionPresencial, aprobarSesion } from '@/lib/operator';
+import { RecyclingSession } from '../types';
+import { CheckCircle2, AlertTriangle, Stamp, Loader2 } from 'lucide-react';
 
 const OperatorVerification: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  // Find session
-  const sessionData = MOCK_SESSIONS.find(s => s.id === id);
+  const [sessionData, setSessionData] = useState<RecyclingSession | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  const [materials, setMaterials] = useState<any[]>([]);
+  const [notes, setNotes] = useState('');
+  const [isCompleting, setIsCompleting] = useState(false);
+
+  useEffect(() => {
+    async function load() {
+      if (!id) return;
+      try {
+        const s = await getSessionById(id);
+        if (s) {
+          setSessionData(s);
+          setMaterials(s.materials.map(m => ({ ...m, id: m.id || m.type, verified: false, verifiedKg: m.kg })));
+          
+          if (s.status === 'Programada') {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              await iniciarSesionPresencial(id, user.id);
+              // Optimistically update status
+              setSessionData({ ...s, status: 'En curso' as any });
+            }
+          }
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    load();
+  }, [id]);
+
+  if (isLoading) {
+    return (
+      <div className="max-w-5xl mx-auto px-6 py-16 text-center">
+        <Loader2 className="w-12 h-12 mx-auto animate-spin text-[#2D5016] mb-4" />
+        <p>Iniciando verificación presencial...</p>
+      </div>
+    );
+  }
 
   if (!sessionData) {
     return (
@@ -25,15 +67,9 @@ const OperatorVerification: React.FC = () => {
     );
   }
 
-  const [materials, setMaterials] = useState<Material[]>(
-    sessionData.materials.map(m => ({ ...m, verified: false }))
-  );
-  const [notes, setNotes] = useState('');
-  const [isCompleting, setIsCompleting] = useState(false);
-
   const updateMaterialKg = (index: number, kg: number) => {
     const updated = [...materials];
-    updated[index] = { ...updated[index], kg };
+    updated[index] = { ...updated[index], verifiedKg: kg };
     setMaterials(updated);
   };
 
@@ -43,20 +79,32 @@ const OperatorVerification: React.FC = () => {
     setMaterials(updated);
   };
 
-  const totalKg = materials.reduce((sum, m) => sum + m.kg, 0);
-  const ecoCoins = calculateEcoCoins(totalKg);
+  const totalVerifiedKg = materials.reduce((sum, m) => sum + (m.verifiedKg || 0), 0);
+  const ecoCoins = Math.floor(totalVerifiedKg / 10);
   const allVerified = materials.every(m => m.verified);
 
   const handleComplete = async () => {
+    if (!id) return;
     setIsCompleting(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    navigate(`/sesion/${id}`);
+    try {
+      const payload = materials.map(m => ({
+        materialId: m.id,
+        verifiedKg: m.verifiedKg,
+        verified: true
+      }));
+
+      await aprobarSesion(id, payload, notes);
+      navigate(`/sesion/${id}`);
+    } catch (err) {
+      console.error(err);
+      alert('Hubo un error al aprobar.');
+    } finally {
+      setIsCompleting(false);
+    }
   };
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-16">
-      {/* Header */}
       <div className="border-b-4 border-[#1A1A1A] pb-8 mb-12">
         <div className="flex items-start justify-between">
           <div>
@@ -75,7 +123,6 @@ const OperatorVerification: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-6">
-          {/* User info */}
           <div className="bg-white border-2 border-[#1A1A1A] p-6">
             <h3 className="mb-4 pb-3 border-b-2 border-[#1A1A1A] text-sm uppercase tracking-wider">
               Información de la Sesión
@@ -93,7 +140,7 @@ const OperatorVerification: React.FC = () => {
               </div>
               <div>
                 <div className="text-xs uppercase tracking-wider text-[#4A4A4A] mb-1">Horario</div>
-                <div className="font-medium">{sessionData.scheduledTime}</div>
+                <div className="font-medium">{sessionData.scheduledTime || '-'}</div>
               </div>
               <div>
                 <div className="text-xs uppercase tracking-wider text-[#4A4A4A] mb-1">Código</div>
@@ -102,7 +149,6 @@ const OperatorVerification: React.FC = () => {
             </div>
           </div>
 
-          {/* Verification table */}
           <div className="bg-white border-2 border-[#1A1A1A]">
             <div className="p-6 border-b-2 border-[#1A1A1A]">
               <h3 className="text-sm uppercase tracking-wider">Verificación de Materiales</h3>
@@ -111,21 +157,13 @@ const OperatorVerification: React.FC = () => {
               </p>
             </div>
 
-            <table className="w-full">
+            <table className="w-full overflow-x-auto block md:table">
               <thead>
-                <tr className="border-b border-[#E8E6DD] bg-[#E8E6DD]">
-                  <th className="text-left p-4 text-xs uppercase tracking-wider font-medium">
-                    Material
-                  </th>
-                  <th className="text-right p-4 text-xs uppercase tracking-wider font-medium">
-                    Declarado
-                  </th>
-                  <th className="text-right p-4 text-xs uppercase tracking-wider font-medium">
-                    Verificado (KG)
-                  </th>
-                  <th className="text-center p-4 text-xs uppercase tracking-wider font-medium">
-                    Estado
-                  </th>
+                <tr className="border-b border-[#E8E6DD] bg-[#E8E6DD] text-left">
+                  <th className="p-4 text-xs uppercase tracking-wider font-medium">Material</th>
+                  <th className="p-4 text-xs uppercase tracking-wider font-medium text-right">Declarado</th>
+                  <th className="p-4 text-xs uppercase tracking-wider font-medium text-right">Verificado</th>
+                  <th className="p-4 text-xs uppercase tracking-wider font-medium text-center">Estado</th>
                 </tr>
               </thead>
               <tbody>
@@ -147,7 +185,7 @@ const OperatorVerification: React.FC = () => {
                         type="number"
                         min="0"
                         step="0.1"
-                        value={material.kg || ''}
+                        value={material.verifiedKg || ''}
                         onChange={(e) => updateMaterialKg(idx, parseFloat(e.target.value) || 0)}
                         className="w-24 px-3 py-2 border-2 border-[#1A1A1A] bg-white focus:outline-none focus:ring-2 focus:ring-[#2D5016] text-right font-bold"
                       />
@@ -173,18 +211,16 @@ const OperatorVerification: React.FC = () => {
                     Total Verificado
                   </td>
                   <td className="text-right p-4 font-bold text-lg">
-                    {totalKg.toFixed(1)} KG
+                    {totalVerifiedKg.toFixed(1)} KG
                   </td>
                   <td className="text-center p-4">
                     {allVerified ? (
                       <span className="text-[#065F46] flex items-center justify-center gap-1">
                         <CheckCircle2 className="w-4 h-4" />
-                        Completo
                       </span>
                     ) : (
                       <span className="text-[#92400E] flex items-center justify-center gap-1">
                         <AlertTriangle className="w-4 h-4" />
-                        Pendiente
                       </span>
                     )}
                   </td>
@@ -193,7 +229,6 @@ const OperatorVerification: React.FC = () => {
             </table>
           </div>
 
-          {/* Operator notes */}
           <div className="bg-white border-2 border-[#1A1A1A] p-6">
             <label className="block mb-3 text-sm uppercase tracking-wider">
               Notas del Operador (Opcional)
@@ -208,9 +243,7 @@ const OperatorVerification: React.FC = () => {
           </div>
         </div>
 
-        {/* Sidebar */}
         <div className="space-y-6">
-          {/* EcoCoins calculation */}
           <div className="bg-[#E8F4E3] border-2 border-[#2D5016] p-6">
             <div className="text-xs uppercase tracking-wider text-[#2D5016] mb-3">
               ecoCoins a Acreditar
@@ -221,7 +254,7 @@ const OperatorVerification: React.FC = () => {
               </div>
             </div>
             <div className="text-xs text-center mt-4 text-[#4A4A4A]">
-              {totalKg.toFixed(1)} KG ÷ 10 = {ecoCoins} ecoCoin{ecoCoins !== 1 ? 's' : ''}
+              {totalVerifiedKg.toFixed(1)} KG ÷ 10 = {ecoCoins} ecoCoin{ecoCoins !== 1 ? 's' : ''}
             </div>
           </div>
 
@@ -233,8 +266,7 @@ const OperatorVerification: React.FC = () => {
             </Callout>
           )}
 
-          {/* Differences warning */}
-          {materials.some((m, idx) => Math.abs(m.kg - sessionData.materials[idx].kg) > 0.5) && (
+          {materials.some((m, idx) => Math.abs(m.verifiedKg - sessionData.materials[idx].kg) > 0.5) && (
             <Callout title="Diferencias Detectadas" variant="warning">
               <p className="text-sm mb-2">
                 Hay diferencias significativas entre los kilogramos declarados y verificados.
@@ -245,7 +277,6 @@ const OperatorVerification: React.FC = () => {
             </Callout>
           )}
 
-          {/* Complete button */}
           <div className="space-y-3">
             <EditorialButton
               variant="primary"
@@ -265,7 +296,7 @@ const OperatorVerification: React.FC = () => {
             </EditorialButton>
 
             <p className="text-xs text-center text-[#4A4A4A]">
-              Al completar, se acreditarán {ecoCoins} ecoCoins al usuario
+              Al completar, se guardará en Solana y se acreditarán {ecoCoins} ecoCoins al usuario
             </p>
           </div>
         </div>

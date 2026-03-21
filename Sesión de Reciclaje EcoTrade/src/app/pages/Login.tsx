@@ -7,10 +7,11 @@
 //  sin glassmorphism, coherente con el resto de la app.
 // ============================================================
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { useAuth } from '../context/AuthContext';
 import { Leaf, AlertCircle, Loader2 } from 'lucide-react';
+import { supabase } from '@/lib/supabase/client';
 
 // ─── Google Icon SVG inline (sin dependencia extra) ──────────
 const GoogleIcon: React.FC<{ className?: string }> = ({ className }) => (
@@ -39,6 +40,10 @@ const Login: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { login, isAuthenticated, isLoading, error, role } = useAuth();
+  
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [opLoading, setOpLoading] = useState(false);
 
   // Destino de redirección tras login (o por defecto según role)
   const from = (location.state as { from?: string } | null)?.from;
@@ -56,6 +61,16 @@ const Login: React.FC = () => {
 
   const handleGoogleLogin = async () => {
     await login();
+  };
+
+  const handleOperatorLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setOpLoading(true);
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+    if (signInError) {
+      alert("Error ingresando como operador: " + signInError.message + "\nSi no tienes cuenta, crea una o ve a Supabase.");
+    }
+    setOpLoading(false);
   };
 
   // ── Render ────────────────────────────────────────────────
@@ -185,50 +200,80 @@ const Login: React.FC = () => {
           {/* Separador */}
           <div className="flex items-center gap-4 my-6">
             <div className="flex-1 h-px" style={{ backgroundColor: '#E8E6DD' }} />
-            <span className="text-xs uppercase tracking-wider" style={{ color: '#9A9A8A' }}>
-              o
+            <span className="text-[10px] uppercase tracking-wider font-bold" style={{ color: '#9A9A8A' }}>
+              o ingresar como operador
             </span>
             <div className="flex-1 h-px" style={{ backgroundColor: '#E8E6DD' }} />
           </div>
 
-          {/* Nota informativa */}
-          <div
-            className="p-4"
-            style={{ backgroundColor: '#E8F4E3', border: '1px solid #2D5016' }}
-          >
-            <p className="text-xs uppercase tracking-wider mb-2" style={{ color: '#2D5016', fontWeight: 600 }}>
-              Sin seed phrases · Sin instalaciones
-            </p>
-            <p className="text-xs" style={{ color: '#4A4A4A' }}>
-              Al iniciar sesión con Google, se deriva automáticamente una wallet
-              Solana asociada a tu correo. No necesitas instalar ninguna
-              extensión ni guardar frases semilla.
-            </p>
-          </div>
-        </div>
-
-        {/* ── Roles disponibles (referencia) ──────────────── */}
-        <div className="mt-6 grid grid-cols-2 gap-4">
-          {[
-            { label: 'Usuario', desc: 'Crea sesiones y acumula ecoCoins' },
-            { label: 'Operador', desc: 'Verifica entregas y emite recibos on-chain' },
-          ].map(r => (
-            <div
-              key={r.label}
-              className="p-4 bg-white"
-              style={{ border: '2px solid #E8E6DD' }}
+          {/* Formulario de Operador */}
+          <form onSubmit={handleOperatorLogin} className="space-y-4">
+            <div>
+              <input
+                type="email"
+                placeholder="Correo de operador"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="w-full p-3 bg-[#F5F3ED] border border-[#1A1A1A] focus:outline-none focus:border-[#2D5016] text-sm"
+              />
+            </div>
+            <div>
+              <input
+                type="password"
+                placeholder="Contraseña"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="w-full p-3 bg-[#F5F3ED] border border-[#1A1A1A] focus:outline-none focus:border-[#2D5016] text-sm"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={isLoading || opLoading}
+              className="w-full flex items-center justify-center gap-2 py-3 px-6 transition-all duration-150"
+              style={{
+                backgroundColor: 'transparent',
+                color: '#1A1A1A',
+                border: '2px solid #1A1A1A',
+                cursor: (isLoading || opLoading) ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+              }}
+              onMouseEnter={e => {
+                if (!isLoading && !opLoading) {
+                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#1A1A1A';
+                  (e.currentTarget as HTMLButtonElement).style.color = '#F5F3ED';
+                }
+              }}
+              onMouseLeave={e => {
+                if (!isLoading && !opLoading) {
+                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent';
+                  (e.currentTarget as HTMLButtonElement).style.color = '#1A1A1A';
+                }
+              }}
             >
-              <p
-                className="text-xs uppercase tracking-wider font-semibold mb-1"
-                style={{ color: '#1A1A1A' }}
-              >
-                {r.label}
+              {opLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'CONTINUAR COMO OPERADOR'}
+            </button>
+          </form>
+
+          {/* ── Credenciales de Operador (Demo Hackathon) ── */}
+          <div className="mt-6 p-4" style={{ backgroundColor: '#F9F9F9', border: '1px dashed #9A9A8A' }}>
+            <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: '#1A1A1A' }}>
+              Credenciales de Operador (Demo Hackathon)
+            </p>
+            <div className="flex flex-col gap-1">
+              <p className="text-xs" style={{ color: '#4A4A4A' }}>
+                <strong style={{ color: '#1A1A1A' }}>Correo:</strong> operador@ecotrade.com
               </p>
               <p className="text-xs" style={{ color: '#4A4A4A' }}>
-                {r.desc}
+                <strong style={{ color: '#1A1A1A' }}>Contraseña:</strong> TestOperador123
               </p>
             </div>
-          ))}
+          </div>
         </div>
 
         {/* ── Footer ──────────────────────────────────────── */}

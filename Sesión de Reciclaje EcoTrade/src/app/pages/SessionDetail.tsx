@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { EditorialButton } from '../components/editorial/EditorialButton';
 import { StatusBadge } from '../components/editorial/StatusBadge';
@@ -7,18 +7,43 @@ import { Callout } from '../components/editorial/Callout';
 import { SolanaReceipt } from '../components/editorial/SolanaReceipt';
 import { TrustScore } from '../components/editorial/TrustScore';
 import { EvidenceHash } from '../components/editorial/EvidenceHash';
-import { MOCK_SESSIONS } from '../data/mock-data';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
-import { MapPin, Calendar, Clock, Package, Download, XCircle, Edit, RefreshCw, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { MapPin, Calendar, Clock, Package, Download, XCircle, Edit, RefreshCw, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
+import { getSessionById, cancelSession as apiCancelSession } from '@/lib/sessions';
+import { RecyclingSession } from '@/app/types';
 
 const SessionDetail: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [cancellationReason, setCancellationReason] = useState('');
+  
+  const [session, setSession] = useState<RecyclingSession | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Find session by id
-  const session = MOCK_SESSIONS.find(s => s.id === id);
+  useEffect(() => {
+    async function load() {
+      if (!id) return;
+      try {
+        const s = await getSessionById(id);
+        setSession(s);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    load();
+  }, [id]);
+
+  if (isLoading) {
+    return (
+      <div className="max-w-5xl mx-auto px-6 py-16 text-center">
+        <Loader2 className="w-12 h-12 mx-auto animate-spin text-[#2D5016] mb-4" />
+        <p>Cargando sesión...</p>
+      </div>
+    );
+  }
 
   if (!session) {
     return (
@@ -34,12 +59,16 @@ const SessionDetail: React.FC = () => {
   const canEdit = session.status === 'Borrador' || session.status === 'Programada';
   const canCancel = session.status === 'Borrador' || session.status === 'Programada';
 
-  const handleCancel = () => {
-    if (cancellationReason.trim()) {
-      // In real app, would update session status
-      console.log('Cancelling session with reason:', cancellationReason);
-      setShowCancelDialog(false);
-      navigate('/historial');
+  const handleCancel = async () => {
+    if (cancellationReason.trim() && id) {
+      try {
+        await apiCancelSession(id, cancellationReason);
+        setShowCancelDialog(false);
+        navigate('/historial');
+      } catch (err) {
+        console.error('Error cancelando sesión:', err);
+        alert('Hubo un error al cancelar la sesión.');
+      }
     }
   };
 

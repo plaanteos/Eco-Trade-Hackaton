@@ -2,16 +2,15 @@ import React from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { EditorialButton } from '../components/editorial/EditorialButton';
 import { Ticket } from '../components/editorial/Ticket';
-import { MOCK_SESSIONS } from '../data/mock-data';
+import { useSession } from '../context/SessionContext';
 import { CheckCircle2, Download, ArrowRight } from 'lucide-react';
 
 const SessionSuccess: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { sessions } = useSession();
 
-  // In a real app, we'd fetch the session by ID
-  // For demo, we'll use a programmed session
-  const session = MOCK_SESSIONS.find(s => s.status === 'Programada') || MOCK_SESSIONS[1];
+  const session = sessions.find(s => s.id === id) || sessions[0];
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-16">

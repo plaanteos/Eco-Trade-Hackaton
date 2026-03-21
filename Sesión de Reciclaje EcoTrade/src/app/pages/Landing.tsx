@@ -3,17 +3,18 @@ import { useNavigate } from 'react-router';
 import { useAuth } from '../context/AuthContext';
 import { EditorialButton } from '../components/editorial/EditorialButton';
 import { Callout } from '../components/editorial/Callout';
-import { MOCK_SESSIONS } from '../data/mock-data';
+import { useSession } from '../context/SessionContext';
 import { Leaf, Award, MapPin, AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
 
 const Landing: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { sessions } = useSession();
 
   // Calcular estadísticas
-  const completedSessions = MOCK_SESSIONS.filter(s => s.status === 'Completada');
-  const pendingReview = MOCK_SESSIONS.filter(s => s.status === 'Pendiente de verificación');
-  const inProgress = MOCK_SESSIONS.filter(s => s.status === 'En curso');
+  const completedSessions = sessions.filter(s => s.status === 'Completada');
+  const pendingReview = sessions.filter(s => s.status === 'Pendiente de verificación');
+  const inProgress = sessions.filter(s => s.status === 'En curso');
   const totalEcoCoins = completedSessions.reduce((sum, s) => sum + s.ecoCoins, 0);
   const totalKg = completedSessions.reduce((sum, s) => sum + s.totalKg, 0);
 
@@ -247,7 +248,7 @@ const Landing: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 gap-4">
-          {MOCK_SESSIONS.slice(0, 3).map(session => (
+          {sessions.slice(0, 3).map(session => (
             <div 
               key={session.id}
               onClick={() => navigate(`/sesion/${session.id}`)}

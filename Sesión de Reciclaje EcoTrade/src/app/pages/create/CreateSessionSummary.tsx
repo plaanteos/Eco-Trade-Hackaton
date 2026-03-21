@@ -27,17 +27,27 @@ const CreateSessionSummary: React.FC = () => {
   const handleConfirm = async () => {
     setIsSubmitting(true);
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    try {
+      const { createSession } = await import('@/lib/sessions');
+      const session = await createSession({
+        collectionPointId: draft.point!.id,
+        scheduledDate: draft.scheduledDate,
+        scheduledTime: draft.scheduledTime,
+        materials: draft.materials.map(m => ({
+          type: m.type,
+          kg: m.kg,
+          observation: m.observation
+        })),
+        evidence: draft.evidence,
+      });
 
-    // Generate mock session ID
-    const sessionId = 'ses-' + Math.random().toString(36).substr(2, 9);
-    
-    // Clear draft
-    clearDraft();
-    
-    // Navigate to success
-    navigate(`/sesion/${sessionId}/exito`);
+      clearDraft();
+      navigate(`/sesion/${session.id}/exito`);
+    } catch (error) {
+      console.error('Error al crear sesión:', error);
+      alert('Hubo un error al crear la sesión. Por favor, intenta de nuevo.');
+      setIsSubmitting(false);
+    }
   };
 
   return (

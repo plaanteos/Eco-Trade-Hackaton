@@ -2,16 +2,18 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { SessionCard } from '../components/editorial/SessionCard';
 import { EditorialButton } from '../components/editorial/EditorialButton';
-import { MOCK_SESSIONS } from '../data/mock-data';
+import { useSession } from '../context/SessionContext';
 import { SessionStatus } from '../types';
-import { Search, Filter } from 'lucide-react';
+import { Search, Filter, Loader2 } from 'lucide-react';
 
 const History: React.FC = () => {
   const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState<SessionStatus | 'Todas'>('Todas');
   const [searchTerm, setSearchTerm] = useState('');
+  
+  const { sessions, isLoading } = useSession();
 
-  const filteredSessions = MOCK_SESSIONS.filter(session => {
+  const filteredSessions = sessions.filter(session => {
     const matchesStatus = statusFilter === 'Todas' || session.status === statusFilter;
     const matchesSearch = searchTerm === '' || 
       session.sessionNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -20,6 +22,15 @@ const History: React.FC = () => {
   });
 
   const statuses: (SessionStatus | 'Todas')[] = ['Todas', 'Programada', 'En curso', 'Pendiente de verificación', 'Completada', 'Cancelada', 'Borrador'];
+
+  if (isLoading) {
+    return (
+      <div className="max-w-7xl mx-auto px-6 py-16 text-center">
+        <Loader2 className="w-12 h-12 mx-auto animate-spin text-[#2D5016] mb-4" />
+        <p>Cargando sesiones...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-16">
