@@ -17,6 +17,8 @@
 5) Open the public verification page for that session: `/verificar/<sessionId>`.
 6) Open the Solana Explorer link to see the tx (devnet).
 
+> If devnet faucet is rate-limited/dry, you can switch to **testnet** or **mainnet-beta** (real SOL) using the same flow.
+
 ## The Problem
 
 Recycling in Latin America runs on paper and trust.
@@ -145,6 +147,32 @@ SOLANA_RPC_URL=
 SOLANA_NETWORK=devnet
 ALCHEMY_APIKEY=
 ```
+
+### Using real SOL (mainnet-beta)
+
+If you have **real SOL** (mainnet) and want a receipt on mainnet-beta:
+
+1) Generate a dedicated operator wallet (do NOT reuse personal wallets):
+```bash
+cd EcoTradeApp
+node ./scripts/generate-solana-keypair.mjs
+```
+This prints:
+- `Public address` → fund this on mainnet-beta
+- `SOLANA_OPERATOR_SEED` → set this in Vercel (keep secret)
+
+2) Fund the operator **public address** with a small amount (e.g. `0.02 SOL`) using Phantom/Solflare.
+
+3) Set these Vercel env vars (Production) and redeploy:
+```
+SOLANA_NETWORK=mainnet-beta
+SOLANA_RPC_URL=https://solana-mainnet.g.alchemy.com/v2/<YOUR_KEY>  # recommended
+SUPABASE_URL=<your supabase url>
+SUPABASE_SERVICE_ROLE_KEY=<service role key>
+SOLANA_OPERATOR_SEED=<base58 secret key from the generator>
+```
+
+4) Re-emit from the operator UI. Public verification will use the receipt's stored cluster.
 
 ## Troubleshooting
 
