@@ -188,9 +188,24 @@ Built at **Aleph Hackathon 2026** 🇦🇷
 Tracks: Best Projects (PL_Genesis) · Crypto Consumer Apps · AI/Emerging Tech
 
 ## Pre-existing work disclosure
-The UI design was created in Figma Make before the hackathon.
-All backend logic — Supabase schema, Solana receipt emission, 
-Trust Score, Auth flow, and API layer — was built during the hackathon 
-from scratch.
+The user interface/frontend design was originally created in **Figma Make** 
+as a personal exploration of the — tool before the hackathon began.
+
+I received **explicit approval from the organizers of the Aleph Hackathon** 
+to use this pre-existing frontend as a base, since:
+
+- The frontend is a static user interface **shell** with no backend logic
+- **The entire backend was created from scratch during the hackathon:**
+  - Supabase schema, RLS policies and storage configuration
+  - Google OAuth authentication flow
+  - Trusted scoring engine (AI layer)
+  - Solana receipt issuance (serverless function `/api/emit-solan`)
+  - Carbon offset calculation module
+  - Operator check queue and verification logic
+  - Public verification page (`/verify/:id`)
+  - Full integration between all layers
+
+The work of the hackathon represents the entire functional layer of EcoTrade.
+The pre-existing code was just UI— with no paths, no data, no blockchain.
 
 **Team:** Jesus Copes
