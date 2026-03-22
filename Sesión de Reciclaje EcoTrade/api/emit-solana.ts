@@ -47,6 +47,7 @@ function decodeBase58(str: string): Uint8Array {
       carry >>= 8;
     }
   }
+  
   for (const char of str) {
     if (char === '1') bytes.push(0);
     else break;
@@ -121,7 +122,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         id, session_number, verified_total_kg, eco_coins,
         evidence_hash, operator_id, verified_by,
         collection_points(name),
-        carbon_footprint_offsets(co2_avoided_kg, trees_equivalent)
+        carbon_footprint_offsets(co2_avoided_kg, trees_equivalent),
+        session_evidence(public_url)
       `)
       .eq('id', sessionId)
       .single();
@@ -140,14 +142,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const co2Kg = cf ? Number(cf.co2_avoided_kg) : 0;
     const operatorId = session.verified_by || session.operator_id || 'ecotrade-op';
 
+    const evidenceUrls = Array.isArray(session.session_evidence)
+      ? session.session_evidence.map((e: any) => e.public_url).filter(Boolean)
+      : [];
+    const realEvidenceUrl = evidenceUrls.length > 0 ? evidenceUrls[0] : '';
+
     const memoPayload = JSON.stringify({
       app: 'EcoTrade',
-      v: 1,
+      v: 2,
       sid: session.id,
       sn: session.session_number,
       kg: kgVerified,
       co2: co2Kg,
+      total_co2_impact_kg: co2Kg,
       evh: session.evidence_hash || '',
+      real_evidence_url: realEvidenceUrl,
       op: operatorId,
       t: emittedAt,
     });

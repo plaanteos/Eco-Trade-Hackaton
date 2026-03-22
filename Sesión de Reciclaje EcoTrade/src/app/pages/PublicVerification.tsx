@@ -20,7 +20,7 @@ const PublicVerification: React.FC = () => {
       try {
         const data = await getPublicSession(id);
         setSession(data);
-        
+
         if (data?.solanaReceipt?.signature) {
           setChainStatus('checking');
           const verification = await verificarReciboPublicoEnCluster(
@@ -71,7 +71,6 @@ const PublicVerification: React.FC = () => {
   const isSimulated = /^[0-9a-f]{64}$/i.test(receipt.signature);
   const isValidOnChain = chainStatus === 'valid';
   const isChecking = chainStatus === 'checking';
-  const isInvalid = chainStatus === 'invalid';
   const clusterLabel = receipt.cluster;
 
   return (
@@ -125,7 +124,7 @@ const PublicVerification: React.FC = () => {
         </div>
 
         <div className="mb-8">
-          <SolanaReceipt 
+          <SolanaReceipt
             receipt={session.solanaReceipt}
             sessionNumber={session.sessionNumber}
             totalKg={session.verifiedTotalKg || session.totalKg}
@@ -144,13 +143,13 @@ const PublicVerification: React.FC = () => {
                 <div className="text-xs uppercase tracking-wider text-[#4A4A4A] mb-2 font-bold">
                   Impacto Ambiental Verificado
                 </div>
-                <CarbonImpactBadge 
-                  co2Kg={session.carbonOffset.co2_avoided_kg} 
-                  trees={session.carbonOffset.trees_equivalent} 
+                <CarbonImpactBadge
+                  co2Kg={session.carbonOffset.co2_avoided_kg}
+                  trees={session.carbonOffset.trees_equivalent}
                   className="p-0 border-none bg-transparent"
                 />
                 <p className="mt-4 text-xs text-[#4A4A4A] border-t border-[#E8E6DD] pt-3 italic">
-                  Impacto calculado con factores internacionales de conversión. 
+                  Impacto calculado con factores internacionales de conversión.
                   Verificable on-chain junto al recibo Solana.
                 </p>
               </div>
@@ -235,9 +234,9 @@ const PublicVerification: React.FC = () => {
 
         {session.evidenceHash && (
           <div className="mb-8">
-            <EvidenceHash 
+            <EvidenceHash
               evidenceHash={session.evidenceHash}
-              evidenceCount={0} 
+              evidenceCount={0}
             />
           </div>
         )}
@@ -245,8 +244,8 @@ const PublicVerification: React.FC = () => {
         <div className="bg-[#FFF4E6] border-l-4 border-[#B85C00] p-6">
           <h3 className="text-sm uppercase tracking-wider font-bold mb-3">Privacidad</h3>
           <p className="text-sm text-[#1A1A1A]">
-            Esta verificación pública solo muestra información necesaria para comprobar 
-            la validez del recibo. No se exponen datos personales sensibles como 
+            Esta verificación pública solo muestra información necesaria para comprobar
+            la validez del recibo. No se exponen datos personales sensibles como
             email, teléfono o dirección del usuario.
           </p>
         </div>
