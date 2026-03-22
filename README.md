@@ -4,6 +4,7 @@
 > Every recycling session verified. Every kilogram proven on-chain.
 
 🌐 **Live demo:** https://eco-trade-hackaton.vercel.app  
+🌐 **presentation video link:** https://www.loom.com/share/b4fa73e451514805ac6f3c607c908331
 📦 **Stack:** React + TypeScript · Supabase · Solana devnet · Alchemy
 
 ---
