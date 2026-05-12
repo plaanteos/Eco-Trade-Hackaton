@@ -21,6 +21,7 @@
     "noFallthroughCasesInSwitch": true,
 
     /* Path alias – mirrors vite.config.ts resolve.alias */
+    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]

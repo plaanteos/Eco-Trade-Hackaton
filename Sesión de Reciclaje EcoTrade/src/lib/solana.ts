@@ -5,6 +5,44 @@ import { CONFIG } from '@/lib/config';
 
 const MEMO_PROGRAM_ID = new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr');
 
+export function isLegacyHashReceiptSignature(signature: string): boolean {
+  return /^[0-9a-f]{64}$/i.test(signature);
+}
+
+async function resolveTransactionVerification(
+  connection: Connection,
+  signature: string
+): Promise<{ valid: boolean; data: unknown }> {
+  const parsedTx = await connection.getParsedTransaction(signature, {
+    commitment: 'confirmed',
+    maxSupportedTransactionVersion: 0,
+  });
+
+  if (parsedTx) {
+    let memoData: unknown = null;
+    const instructions = parsedTx.transaction.message.instructions;
+    for (const ix of instructions) {
+      if ('programId' in ix && ix.programId.equals(MEMO_PROGRAM_ID)) {
+        memoData = 'parsed' in ix ? ix.parsed : ix.data;
+      }
+    }
+
+    return { valid: true, data: memoData };
+  }
+
+  const statuses = await connection.getSignatureStatuses([signature], {
+    searchTransactionHistory: true,
+  });
+
+  const status = statuses.value[0];
+  if (!status || status.err) {
+    return { valid: false, data: null };
+  }
+
+  const isConfirmed = status.confirmationStatus === 'confirmed' || status.confirmationStatus === 'finalized';
+  return { valid: isConfirmed, data: { confirmationStatus: status.confirmationStatus } };
+}
+
 function getRpcUrlForCluster(cluster: SolanaReceipt['cluster']): string {
   // Si el usuario configuró un RPC y coincide con su red actual, usarlo.
   if (CONFIG.SOLANA_NETWORK === cluster && CONFIG.SOLANA_RPC_URL) return CONFIG.SOLANA_RPC_URL;
@@ -68,28 +106,7 @@ export async function verificarReciboPublico(signature: string): Promise<{valid:
     const rpcUrl = getRpcUrlForCluster(cluster);
     const connection = new Connection(rpcUrl, 'confirmed');
 
-    const parsedTx = await connection.getParsedTransaction(signature, {
-      commitment: 'confirmed',
-      maxSupportedTransactionVersion: 0
-    });
-
-    if (!parsedTx) {
-      return { valid: false, data: null };
-    }
-
-    // Extraer el memo del log de instrucciones
-    let memoData = null;
-    const instructions = parsedTx.transaction.message.instructions;
-    for (const ix of instructions) {
-      if ('programId' in ix && ix.programId.equals(MEMO_PROGRAM_ID)) {
-         memoData = 'parsed' in ix ? ix.parsed : ix.data;
-      }
-    }
-
-    return { 
-      valid: true, 
-      data: memoData 
-    };
+    return await resolveTransactionVerification(connection, signature);
   } catch (err) {
     console.error('[Solana] Error verificando recibo:', err);
     return { valid: false, data: null };
@@ -106,24 +123,7 @@ export async function verificarReciboPublicoEnCluster(
   try {
     const rpcUrl = getRpcUrlForCluster(cluster);
     const connection = new Connection(rpcUrl, 'confirmed');
-    const parsedTx = await connection.getParsedTransaction(signature, {
-      commitment: 'confirmed',
-      maxSupportedTransactionVersion: 0,
-    });
-
-    if (!parsedTx) {
-      return { valid: false, data: null };
-    }
-
-    let memoData = null;
-    const instructions = parsedTx.transaction.message.instructions;
-    for (const ix of instructions) {
-      if ('programId' in ix && ix.programId.equals(MEMO_PROGRAM_ID)) {
-        memoData = 'parsed' in ix ? ix.parsed : ix.data;
-      }
-    }
-
-    return { valid: true, data: memoData };
+    return await resolveTransactionVerification(connection, signature);
   } catch (err) {
     console.error('[Solana] Error verificando recibo (cluster):', err);
     return { valid: false, data: null };

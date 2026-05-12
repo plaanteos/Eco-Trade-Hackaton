@@ -10,9 +10,10 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { getSessionById } from '@/lib/sessions';
 import { RecyclingSession } from '@/app/types';
+import { isLegacyHashReceiptSignature, verificarReciboPublicoEnCluster } from '@/lib/solana';
 import {
   ArrowLeft, Copy, Check, ExternalLink, Shield,
-  Leaf, Loader2, CheckCircle, Hash
+  Leaf, Loader2, CheckCircle, AlertTriangle
 } from 'lucide-react';
 import { EditorialButton } from '../components/editorial/EditorialButton';
 
@@ -22,6 +23,7 @@ const SolanaProofPage: React.FC = () => {
   const [session, setSession] = useState<RecyclingSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [receiptState, setReceiptState] = useState<'checking' | 'valid' | 'invalid' | 'legacy'>('checking');
 
   useEffect(() => {
     if (!id) return;
@@ -31,6 +33,32 @@ const SolanaProofPage: React.FC = () => {
       .catch(console.error)
       .finally(() => setIsLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    async function verifyReceipt() {
+      if (!session?.solanaReceipt) {
+        setReceiptState('checking');
+        return;
+      }
+
+      if (isLegacyHashReceiptSignature(session.solanaReceipt.signature)) {
+        setReceiptState('legacy');
+        return;
+      }
+
+      setReceiptState('checking');
+      const verification = await verificarReciboPublicoEnCluster(
+        session.solanaReceipt.signature,
+        session.solanaReceipt.cluster
+      );
+      setReceiptState(verification.valid ? 'valid' : 'invalid');
+    }
+
+    verifyReceipt().catch((error) => {
+      console.error(error);
+      setReceiptState('invalid');
+    });
+  }, [session]);
 
   const handleCopy = async (text: string) => {
     await navigator.clipboard.writeText(text);
@@ -71,7 +99,52 @@ const SolanaProofPage: React.FC = () => {
   }
 
   const receipt = session.solanaReceipt;
-  const isSimulated = /^[0-9a-f]{64}$/i.test(receipt.signature);
+  const isLegacyReceipt = receiptState === 'legacy';
+  const isValidOnChain = receiptState === 'valid';
+  const isCheckingReceipt = receiptState === 'checking';
+  const headerMeta = isValidOnChain
+    ? {
+        label: 'Registro On-Chain',
+        stampTop: 'Solana Devnet',
+        stampMain: 'ON-CHAIN',
+        stampSub: 'VERIFIED',
+        border: 'border-[#4ADE80] bg-[#14532D]',
+        accent: 'text-[#4ADE80]',
+        accentSoft: 'text-[#86EFAC]',
+        blockBg: 'bg-[#14532D]',
+        badge: 'Confirmed',
+        summary: 'Transacción confirmada en la blockchain de Solana',
+        proofLabel: 'Transaction Signature',
+      }
+    : isLegacyReceipt
+      ? {
+          label: 'Registro Legado',
+          stampTop: 'Registro histórico',
+          stampMain: 'LEGADO',
+          stampSub: 'REEMITIR',
+          border: 'border-[#F59E0B] bg-[#78350F]',
+          accent: 'text-[#FCD34D]',
+          accentSoft: 'text-[#FCD34D]',
+          blockBg: 'bg-[#78350F]',
+          badge: 'Legacy',
+          summary: 'Firma heredada no verificable on-chain. Debe reemitirse.',
+          proofLabel: 'Firma heredada no válida',
+        }
+      : {
+          label: 'Registro No Verificable',
+          stampTop: isCheckingReceipt ? 'Verificando RPC' : 'Firma inconsistente',
+          stampMain: isCheckingReceipt ? 'REVISANDO' : 'INVÁLIDO',
+          stampSub: isCheckingReceipt ? 'RPC' : 'REVISAR',
+          border: 'border-[#FCA5A5] bg-[#7F1D1D]',
+          accent: 'text-[#FECACA]',
+          accentSoft: 'text-[#FECACA]',
+          blockBg: 'bg-[#7F1D1D]',
+          badge: isCheckingReceipt ? 'Checking' : 'Invalid',
+          summary: isCheckingReceipt
+            ? 'Validando la firma contra el cluster configurado.'
+            : 'La firma almacenada no pudo validarse públicamente en Solana.',
+          proofLabel: 'Firma no verificable',
+        };
 
   return (
     <div className="min-h-screen bg-[#1A1A1A] text-[#F5F3ED]">
@@ -86,7 +159,7 @@ const SolanaProofPage: React.FC = () => {
         </button>
         <div className="flex-1 text-center">
           <span className="text-xs uppercase tracking-[0.3em] text-[#E8E6DD]">
-            {isSimulated ? 'Comprobante de Integridad' : 'Registro On-Chain'}
+            {headerMeta.label}
           </span>
         </div>
         {/* EcoTrade logo */}
@@ -101,27 +174,17 @@ const SolanaProofPage: React.FC = () => {
         {/* Header section */}
         <div className="text-center mb-12">
           {/* Big stamp */}
-          <div className={`inline-block border-4 px-12 py-6 mb-8 transform -rotate-1 ${
-            isSimulated
-              ? 'border-[#F59E0B] bg-[#78350F]'
-              : 'border-[#4ADE80] bg-[#14532D]'
-          }`}>
-            <div className={`text-xs uppercase tracking-[0.4em] mb-2 ${
-              isSimulated ? 'text-[#FCD34D]' : 'text-[#86EFAC]'
-            }`}>
-              {isSimulated ? 'Hackathon Demo' : 'Solana Devnet'}
+          <div className={`inline-block border-4 px-12 py-6 mb-8 transform -rotate-1 ${headerMeta.border}`}>
+            <div className={`text-xs uppercase tracking-[0.4em] mb-2 ${headerMeta.accentSoft}`}>
+              {headerMeta.stampTop}
             </div>
-            <div className={`text-4xl font-black uppercase tracking-wider mb-1 ${
-              isSimulated ? 'text-[#FCD34D]' : 'text-[#4ADE80]'
-            }`} style={{ fontFamily: 'var(--font-serif)' }}>
-              {isSimulated ? 'HASH' : 'ON-CHAIN'}
+            <div className={`text-4xl font-black uppercase tracking-wider mb-1 ${headerMeta.accent}`} style={{ fontFamily: 'var(--font-serif)' }}>
+              {headerMeta.stampMain}
             </div>
-            <div className={`text-2xl font-bold uppercase tracking-wider ${
-              isSimulated ? 'text-[#FCD34D]' : 'text-[#4ADE80]'
-            }`} style={{ fontFamily: 'var(--font-serif)' }}>
-              VERIFIED
+            <div className={`text-2xl font-bold uppercase tracking-wider ${headerMeta.accent}`} style={{ fontFamily: 'var(--font-serif)' }}>
+              {headerMeta.stampSub}
             </div>
-            <div className={`text-xs mt-2 ${isSimulated ? 'text-[#FCD34D]' : 'text-[#86EFAC]'}`}>
+            <div className={`text-xs mt-2 ${headerMeta.accentSoft}`}>
               {new Date(receipt.emittedAt).toLocaleString('es-ES')}
             </div>
           </div>
@@ -130,9 +193,7 @@ const SolanaProofPage: React.FC = () => {
             Sesión No. {session.sessionNumber}
           </h1>
           <p className="text-[#E8E6DD] text-sm">
-            {isSimulated
-              ? 'Comprobante de integridad criptográfica — SHA-256 canónico'
-              : 'Transacción confirmada en la blockchain de Solana'}
+            {headerMeta.summary}
           </p>
         </div>
 
@@ -157,17 +218,14 @@ const SolanaProofPage: React.FC = () => {
         {/* Proof block */}
         <div className="border-2 border-[#4A4A4A] mb-8">
           {/* Block header */}
-          <div className={`px-6 py-4 flex items-center justify-between border-b border-[#4A4A4A] ${
-            isSimulated ? 'bg-[#78350F]' : 'bg-[#14532D]'
-          }`}>
+          <div className={`px-6 py-4 flex items-center justify-between border-b border-[#4A4A4A] ${headerMeta.blockBg}`}>
             <div className="flex items-center gap-3">
-              {isSimulated
-                ? <Hash className="w-5 h-5 text-[#FCD34D]" />
-                : <CheckCircle className="w-5 h-5 text-[#4ADE80]" />
-              }
+              {isValidOnChain
+                ? <CheckCircle className="w-5 h-5 text-[#4ADE80]" />
+                : <AlertTriangle className="w-5 h-5 text-[#FCD34D]" />}
               <div>
-                <div className={`text-xs uppercase tracking-wider ${isSimulated ? 'text-[#FCD34D]' : 'text-[#86EFAC]'}`}>
-                  {isSimulated ? 'SHA-256 Canonical Hash' : 'Transaction Signature'}
+                <div className={`text-xs uppercase tracking-wider ${headerMeta.accentSoft}`}>
+                  {headerMeta.proofLabel}
                 </div>
                 <div className="text-xs text-[#E8E6DD] mt-0.5">
                   Cluster: {receipt.cluster} · Program: {receipt.programId?.slice(0, 8)}…
@@ -175,9 +233,9 @@ const SolanaProofPage: React.FC = () => {
               </div>
             </div>
             <div className={`px-3 py-1 text-xs uppercase tracking-wider font-bold ${
-              isSimulated ? 'bg-[#F59E0B] text-[#1A1A1A]' : 'bg-[#4ADE80] text-[#1A1A1A]'
+              isValidOnChain ? 'bg-[#4ADE80] text-[#1A1A1A]' : 'bg-[#F59E0B] text-[#1A1A1A]'
             }`}>
-              {isSimulated ? 'Demo' : 'Confirmed'}
+              {headerMeta.badge}
             </div>
           </div>
 
@@ -194,7 +252,7 @@ const SolanaProofPage: React.FC = () => {
                 {copied ? <Check className="w-4 h-4 text-[#4ADE80]" /> : <Copy className="w-4 h-4" />}
                 {copied ? 'Copiado' : 'Copiar'}
               </button>
-              {!isSimulated && (
+              {isValidOnChain && (
                 <a
                   href={receipt.explorerUrl}
                   target="_blank"
@@ -209,8 +267,7 @@ const SolanaProofPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Demo explanation, only if simulated */}
-        {isSimulated && (
+        {!isValidOnChain && (
           <div className="border-l-4 border-[#F59E0B] bg-[#2A2A2A] p-6 mb-8">
             <div className="flex gap-4">
               <Shield className="w-6 h-6 text-[#F59E0B] flex-shrink-0 mt-0.5" />
@@ -219,18 +276,20 @@ const SolanaProofPage: React.FC = () => {
                   Sobre este comprobante
                 </div>
                 <p className="text-sm text-[#E8E6DD] leading-relaxed mb-3">
-                  La transacción Solana falló por límites de airdrop gratuito en devnet. 
-                  Este hash SHA-256 canónico equivale criptográficamente a un sello de datos: 
-                  cualquier modificación de la información cambiaría el hash.
+                  {isLegacyReceipt
+                    ? 'La firma almacenada pertenece a un registro heredado y no constituye una transacción pública verificable en Solana.'
+                    : isCheckingReceipt
+                      ? 'Se está verificando la firma contra el cluster configurado antes de exponerla como comprobante válido.'
+                      : 'La firma almacenada no pudo confirmarse públicamente en Solana y debe revisarse o reemitirse.'}
                 </p>
                 <div className="text-xs text-[#E8E6DD] space-y-1">
                   <div className="flex gap-2">
-                    <span className="text-[#F59E0B] w-28 flex-shrink-0">Algoritmo:</span>
-                    <span className="font-mono">SHA-256</span>
+                    <span className="text-[#F59E0B] w-28 flex-shrink-0">Estado:</span>
+                    <span className="font-mono">{headerMeta.badge}</span>
                   </div>
                   <div className="flex gap-2">
-                    <span className="text-[#F59E0B] w-28 flex-shrink-0">Datos hasheados:</span>
-                    <span>ID sesión · Session No. · KG verificados · CO₂ · Operador · Timestamp</span>
+                    <span className="text-[#F59E0B] w-28 flex-shrink-0">Acción:</span>
+                    <span>{isLegacyReceipt ? 'Reemitir recibo on-chain' : 'Revisar RPC o reemitir recibo'}</span>
                   </div>
                 </div>
               </div>

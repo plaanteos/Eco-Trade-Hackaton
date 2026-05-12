@@ -4,9 +4,9 @@ import { SolanaReceipt } from '../components/editorial/SolanaReceipt';
 import { EvidenceHash } from '../components/editorial/EvidenceHash';
 import { CarbonImpactBadge } from '../components/editorial/CarbonImpactBadge';
 import { getPublicSession } from '@/lib/sessions';
-import { verificarReciboPublicoEnCluster } from '@/lib/solana';
+import { isLegacyHashReceiptSignature, verificarReciboPublicoEnCluster } from '@/lib/solana';
 import { PublicSessionData } from '@/lib/sessions';
-import { MapPin, Calendar, Clock, Package, Shield, Loader2, Leaf, ExternalLink } from 'lucide-react';
+import { MapPin, Calendar, Clock, Package, Shield, Loader2, Leaf, ExternalLink, AlertTriangle } from 'lucide-react';
 
 const PublicVerification: React.FC = () => {
   const { id } = useParams();
@@ -68,10 +68,11 @@ const PublicVerification: React.FC = () => {
   }
 
   const receipt = session.solanaReceipt;
-  const isSimulated = /^[0-9a-f]{64}$/i.test(receipt.signature);
+  const isLegacyReceipt = isLegacyHashReceiptSignature(receipt.signature);
   const isValidOnChain = chainStatus === 'valid';
   const isChecking = chainStatus === 'checking';
   const clusterLabel = receipt.cluster;
+  const receiptState = isLegacyReceipt ? 'legacy' : isValidOnChain ? 'valid' : 'invalid';
 
   return (
     <div className="min-h-screen bg-[#F5F3ED]">
@@ -98,18 +99,22 @@ const PublicVerification: React.FC = () => {
           <div className="inline-block border-4 border-[#2D5016] bg-white px-12 py-6 transform rotate-1 shadow-lg">
             <Shield className="w-12 h-12 text-[#2D5016] mx-auto mb-3" />
             <div className="text-3xl font-bold text-[#2D5016] uppercase tracking-wider mb-2" style={{ fontFamily: 'var(--font-serif)' }}>
-              {isValidOnChain ? 'RECIBO VERIFICADO' : 'RECIBO EN PROCESO'}
+              {isValidOnChain ? 'RECIBO VERIFICADO' : isLegacyReceipt ? 'RECIBO LEGADO' : 'RECIBO INVÁLIDO'}
             </div>
             <div className="text-lg text-[#2D5016] uppercase tracking-wider mb-2" style={{ fontFamily: 'var(--font-serif)' }}>
               EN SOLANA
             </div>
             {!isChecking && (
               <div className={`text-sm tracking-wider font-bold ${isValidOnChain ? 'text-green-600' : 'text-red-600'}`}>
-                {isValidOnChain ? '✓ FIRMA ON-CHAIN VÁLIDA' : '✗ FIRMA NO ENCONTRADA EN EXPLORADOR'}
+                {isValidOnChain
+                  ? '✓ FIRMA ON-CHAIN VÁLIDA'
+                  : isLegacyReceipt
+                    ? '✗ REGISTRO LEGADO NO VERIFICABLE'
+                    : '✗ FIRMA NO ENCONTRADA EN EXPLORADOR'}
               </div>
             )}
 
-            {!isSimulated && receipt?.explorerUrl && (
+            {!isLegacyReceipt && isValidOnChain && receipt?.explorerUrl && (
               <a
                 href={receipt.explorerUrl}
                 target="_blank"
@@ -123,12 +128,26 @@ const PublicVerification: React.FC = () => {
           </div>
         </div>
 
+        {!isChecking && !isValidOnChain && (
+          <div className="bg-[#FFF4E6] border-l-4 border-[#B85C00] p-6 mb-8 flex gap-4">
+            <AlertTriangle className="w-6 h-6 text-[#B85C00] flex-shrink-0 mt-0.5" />
+            <div>
+              <h3 className="text-sm uppercase tracking-wider font-bold mb-2">Estado on-chain inconsistente</h3>
+              <p className="text-sm text-[#1A1A1A]">
+                El recibo existe en la base de datos, pero la transacción no pudo verificarse de forma pública.
+                Debe reemitirse antes de considerarse válido como comprobante blockchain.
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="mb-8">
           <SolanaReceipt
             receipt={session.solanaReceipt}
             sessionNumber={session.sessionNumber}
             totalKg={session.verifiedTotalKg || session.totalKg}
             ecoCoins={session.ecoCoins}
+              verificationState={receiptState}
           />
         </div>
 
@@ -236,7 +255,7 @@ const PublicVerification: React.FC = () => {
           <div className="mb-8">
             <EvidenceHash
               evidenceHash={session.evidenceHash}
-              evidenceCount={0}
+              evidenceCount={session.evidence?.length || 0}
             />
           </div>
         )}

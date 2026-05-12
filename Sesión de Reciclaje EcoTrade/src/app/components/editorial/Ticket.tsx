@@ -1,6 +1,7 @@
 import React from 'react';
 import { RecyclingSession } from '../../types';
 import { StatusBadge } from './StatusBadge';
+import { PublicVerificationQr } from './PublicVerificationQr';
 
 interface TicketProps {
   session: RecyclingSession;
@@ -84,14 +85,10 @@ export const Ticket: React.FC<TicketProps> = ({ session, showStamp = false }) =>
         </div>
       </div>
 
-      {/* QR Code placeholder */}
-      {session.qrCode && (
+      {/* QR de verificación pública */}
+      {session.id && (
         <div className="mb-6 text-center">
-          <div className="inline-block border-2 border-[#1A1A1A] p-4">
-            <div className="w-32 h-32 bg-[#E8E6DD] flex items-center justify-center">
-              <div className="text-xs text-[#4A4A4A]">{session.qrCode}</div>
-            </div>
-          </div>
+          <PublicVerificationQr sessionId={session.id} label="QR de validación" size={128} />
           <div className="text-xs text-[#4A4A4A] mt-2">Presenta este código en el punto</div>
         </div>
       )}

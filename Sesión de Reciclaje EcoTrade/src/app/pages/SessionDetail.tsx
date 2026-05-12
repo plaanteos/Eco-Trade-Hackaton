@@ -8,13 +8,14 @@ import { SolanaReceipt } from '../components/editorial/SolanaReceipt';
 import { TrustScore } from '../components/editorial/TrustScore';
 import { EvidenceHash } from '../components/editorial/EvidenceHash';
 import { CarbonImpactBadge } from '../components/editorial/CarbonImpactBadge';
+import { PublicVerificationQr } from '../components/editorial/PublicVerificationQr';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { MapPin, Calendar, Clock, Package, Download, XCircle, RefreshCw, Loader2, ExternalLink, Upload } from 'lucide-react';
 import { getSessionById, cancelSession as apiCancelSession } from '@/lib/sessions';
 import { RecyclingSession } from '@/app/types';
 import { useAuth } from '../context/AuthContext';
 import { uploadEvidence } from '@/lib/storage/uploadEvidence';
-import { emitirReciboSolana } from '@/lib/solana';
+import { emitirReciboSolana, isLegacyHashReceiptSignature } from '@/lib/solana';
 
 const SessionDetail: React.FC = () => {
   const { id } = useParams();
@@ -81,7 +82,7 @@ const SessionDetail: React.FC = () => {
     : (session.operatorNote ?? '').trim();
 
   const hasReceipt = Boolean(session.solanaReceipt);
-  const isDemoReceipt = Boolean(session.solanaReceipt && /^[0-9a-f]{64}$/i.test(session.solanaReceipt.signature));
+  const isLegacyReceipt = Boolean(session.solanaReceipt && isLegacyHashReceiptSignature(session.solanaReceipt.signature));
   const isMissingReceipt = session.status === 'Completada' && !session.solanaReceipt;
 
   const canCancel = session.status === 'Borrador' || session.status === 'Programada';
@@ -386,11 +387,11 @@ const SessionDetail: React.FC = () => {
             </Callout>
           )}
 
-          {/* Caso: recibo demo (hash hex) guardado históricamente */}
-          {isOperador && session.status === 'Completada' && hasReceipt && isDemoReceipt && (
+          {/* Caso: recibo legado no verificable guardado históricamente */}
+          {isOperador && session.status === 'Completada' && hasReceipt && isLegacyReceipt && (
             <Callout title="Recibo On-Chain" variant="warning">
               <p className="text-sm mb-4">
-                Este recibo fue generado en modo demo (hash) y no corresponde a una transacción real.
+                Este recibo es un registro legado no verificable y no corresponde a una transacción real de Solana.
                 Puedes re-emitirlo para obtener una firma válida en Solana devnet.
               </p>
               <EditorialButton
@@ -424,6 +425,7 @@ const SessionDetail: React.FC = () => {
                 sessionNumber={session.sessionNumber}
                 totalKg={session.verifiedTotalKg || session.totalKg}
                 ecoCoins={session.ecoCoins}
+                verificationState={isLegacyReceipt ? 'legacy' : 'valid'}
               />
 
               {/* Carbon Impact Badge */}
@@ -446,7 +448,7 @@ const SessionDetail: React.FC = () => {
                   onClick={() => navigate(`/sesion/${id}/comprobante`)}
                 >
                   <ExternalLink className="w-5 h-5 text-white" />
-                  Ver Petición On-Chain
+                  Ver Comprobante On-Chain
                 </EditorialButton>
                 <EditorialButton 
                   variant="outline" 
@@ -461,19 +463,7 @@ const SessionDetail: React.FC = () => {
 
               {/* QR for public verification */}
               <div className="bg-white border-2 border-[#1A1A1A] p-6">
-                <div className="text-xs uppercase tracking-wider text-[#4A4A4A] mb-4 text-center">
-                  Verificación Pública
-                </div>
-                <div className="border-2 border-[#1A1A1A] p-4 mb-4">
-                  <div className="w-full aspect-square bg-[#E8E6DD] flex items-center justify-center">
-                    <div className="text-center">
-                      <div className="text-sm text-[#4A4A4A] mb-2">QR Code</div>
-                      <div className="text-xs text-[#4A4A4A] font-mono">
-                        /verificar/{session.id}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <PublicVerificationQr sessionId={session.id} />
                 <p className="text-xs text-center text-[#4A4A4A] mb-4">
                   Escanea este código QR para verificar públicamente este recibo
                 </p>

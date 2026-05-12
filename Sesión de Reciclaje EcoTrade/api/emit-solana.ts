@@ -22,12 +22,7 @@ import { createClient } from '@supabase/supabase-js';
 // ── Constantes ────────────────────────────────────────────────
 const MEMO_PROGRAM_ID = new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr');
 const CLUSTER = 'devnet';
-
-// Usa el RPC de Alchemy si está disponible, o el público de devnet
-const RPC_URL =
-  process.env.SOLANA_RPC_URL ||
-  `https://solana-devnet.g.alchemy.com/v2/${process.env.ALCHEMY_APIKEY || ''}` ||
-  'https://api.devnet.solana.com';
+const PUBLIC_DEVNET_RPC_URL = 'https://api.devnet.solana.com';
 
 // ── Helper: decodificar base58 sin dependencia extra ──────────
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
@@ -78,6 +73,34 @@ function getOperatorKeypair(): Keypair {
   return Keypair.fromSeed(seedBytes.slice(0, 32));
 }
 
+function getRpcUrl(): string {
+  if (process.env.SOLANA_RPC_URL) {
+    return process.env.SOLANA_RPC_URL;
+  }
+
+  const alchemyKey = process.env.ALCHEMY_APIKEY || process.env.ALCHEMY_API_KEY;
+  if (alchemyKey) {
+    return `https://solana-devnet.g.alchemy.com/v2/${alchemyKey}`;
+  }
+
+  return PUBLIC_DEVNET_RPC_URL;
+}
+
+async function assertTransactionVisible(connection: Connection, signature: string): Promise<void> {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const statuses = await connection.getSignatureStatuses([signature], {
+      searchTransactionHistory: true,
+    });
+    const status = statuses.value[0];
+
+    if (status && !status.err && (status.confirmationStatus === 'confirmed' || status.confirmationStatus === 'finalized')) {
+      return;
+    }
+  }
+
+  throw new Error('La transacción fue enviada pero no quedó visible en el historial RPC para verificación pública');
+}
+
 // ── Asegurar fondos (airdrop si balance bajo) ─────────────────
 async function ensureFunds(connection: Connection, pubkey: PublicKey): Promise<void> {
   const balance = await connection.getBalance(pubkey, 'confirmed');
@@ -123,7 +146,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         evidence_hash, operator_id, verified_by,
         collection_points(name),
         carbon_footprint_offsets(co2_avoided_kg, trees_equivalent),
-        session_evidence(public_url)
+        session_evidence(public_url, storage_path)
       `)
       .eq('id', sessionId)
       .single();
@@ -142,10 +165,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const co2Kg = cf ? Number(cf.co2_avoided_kg) : 0;
     const operatorId = session.verified_by || session.operator_id || 'ecotrade-op';
 
-    const evidenceUrls = Array.isArray(session.session_evidence)
-      ? session.session_evidence.map((e: any) => e.public_url).filter(Boolean)
-      : [];
-    const realEvidenceUrl = evidenceUrls.length > 0 ? evidenceUrls[0] : '';
+    const evidenceRows = Array.isArray(session.session_evidence) ? session.session_evidence : [];
+    let realEvidenceUrl = '';
+
+    const firstEvidence = evidenceRows[0];
+    if (firstEvidence?.public_url) {
+      realEvidenceUrl = firstEvidence.public_url;
+    } else if (firstEvidence?.storage_path) {
+      const { data: signedEvidence } = await supabase.storage
+        .from('session-evidence')
+        .createSignedUrl(firstEvidence.storage_path, 60 * 60 * 24 * 7);
+
+      realEvidenceUrl = signedEvidence?.signedUrl ?? '';
+    }
 
     const memoPayload = JSON.stringify({
       app: 'EcoTrade',
@@ -164,7 +196,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log(`[Solana API] Memo (${memoPayload.length} bytes):`, memoPayload);
 
     // 3. Conectar y obtener keypair
-    const connection = new Connection(RPC_URL, 'confirmed');
+    const connection = new Connection(getRpcUrl(), 'confirmed');
     const keypair = getOperatorKeypair();
     console.log('[Solana API] Wallet:', keypair.publicKey.toBase58());
 
@@ -200,6 +232,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (confirmation.value.err) {
       throw new Error(`Tx falló en confirmación: ${JSON.stringify(confirmation.value.err)}`);
     }
+
+    await assertTransactionVisible(connection, signature);
 
     console.log('[Solana API] Tx confirmada:', signature);
 
