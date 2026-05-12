@@ -8,4 +8,10 @@
   Run `npm i` to install the dependencies.
 
   Run `npm run dev` to start the development server.
+
+  ## Technical documentation
+
+  Trust score model and antifraud architecture:
+
+  - `guidelines/TrustScore-Antifraude.md`
   
