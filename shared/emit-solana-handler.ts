@@ -276,21 +276,6 @@ async function requireOperator(
   };
 }
 
-async function getSignedEvidenceUrl(
-  supabase: ReturnType<typeof createClient>,
-  evidence: SessionEvidenceRow | undefined
-): Promise<string> {
-  if (!evidence) return '';
-  if (evidence.public_url) return evidence.public_url;
-  if (!evidence.storage_path) return '';
-
-  const { data } = await supabase.storage
-    .from('session-evidence')
-    .createSignedUrl(evidence.storage_path, 60 * 60 * 24 * 7);
-
-  return data?.signedUrl ?? '';
-}
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -378,7 +363,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const carbonOffset = normalizeJoinedRow(session.carbon_footprint_offsets);
     const evidenceRows = session.session_evidence ?? [];
-    const firstEvidenceUrl = await getSignedEvidenceUrl(supabase, evidenceRows[0]);
+    const firstEvidenceRef = evidenceRows[0]?.storage_path ?? evidenceRows[0]?.public_url ?? '';
 
     const memoPayload = JSON.stringify({
       app: 'EcoTrade',
@@ -389,7 +374,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       co2: carbonOffset ? Number(carbonOffset.co2_avoided_kg) : 0,
       total_co2_impact_kg: carbonOffset ? Number(carbonOffset.co2_avoided_kg) : 0,
       evh: session.evidence_hash || '',
-      real_evidence_url: firstEvidenceUrl,
+      evc: evidenceRows.length,
+      evr: firstEvidenceRef.slice(0, 120),
       op: operator.displayName,
       t: new Date().toISOString(),
     });

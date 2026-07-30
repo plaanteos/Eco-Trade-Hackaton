@@ -6,6 +6,18 @@ import { TrustScore } from '../components/editorial/TrustScore';
 import { Callout } from '../components/editorial/Callout';
 import { MapPin, Calendar, Package, AlertTriangle, CheckCircle2, XCircle, Loader2, ArrowLeft } from 'lucide-react';
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  if (typeof error === 'string' && error.trim()) {
+    return error;
+  }
+
+  return 'Error en la operación.';
+}
+
 const OperatorReviewDetail: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -105,7 +117,7 @@ const OperatorReviewDetail: React.FC = () => {
       navigate('/operador/cola');
     } catch (err) {
       console.error(err);
-      alert('Error en la operación.');
+      alert(getErrorMessage(err));
     } finally {
       setIsSubmitting(false);
     }
