@@ -1,1 +1,1 @@
-export { default } from '../../shared/emit-solana-handler';
+export { default } from './_shared/emit-solana-handler';

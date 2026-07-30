@@ -127,15 +127,17 @@ export async function emitirReciboSolana(sessionId: string): Promise<SolanaRecei
     body: JSON.stringify({ sessionId }),
   });
 
+  const rawBody = await res.text();
+
   let data: any = null;
   try {
-    data = await res.json();
+    data = rawBody ? JSON.parse(rawBody) : null;
   } catch {
     // ignore json parse errors
   }
 
   if (!res.ok || !data?.success) {
-    const message = data?.error || `Error del servidor en API Solana (${res.status})`;
+    const message = data?.error || rawBody || `Error del servidor en API Solana (${res.status})`;
     console.error('[Solana] Error llamando a API emit-solana:', message);
     throw new Error(message);
   }
