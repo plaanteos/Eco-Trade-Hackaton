@@ -23,34 +23,19 @@ import type {
   TrustScore,
   TrustSignal,
   TrustLevel,
-  MaterialType,
   SessionStatus,
 } from "@/app/types";
-
-// ─── Constantes de señales ───────────────────────────────────
-
-const SIGNAL_ID = {
-  MATERIALS_COMPATIBLE: "materials-compatible",
-  KG_RANGE:             "kg-range",
-  EVIDENCE_ATTACHED:    "evidence-attached",
-  USER_HISTORY:         "user-history",
-  RAEE_EVIDENCE:        "raee-evidence",
-} as const;
-
-/** Peso de cada señal en puntos absolutos */
-const WEIGHTS: Record<string, number> = {
-  [SIGNAL_ID.MATERIALS_COMPATIBLE]: 25,
-  [SIGNAL_ID.KG_RANGE]:             25,
-  [SIGNAL_ID.EVIDENCE_ATTACHED]:    20,
-  [SIGNAL_ID.USER_HISTORY]:         20,
-  [SIGNAL_ID.RAEE_EVIDENCE]:        15,
-};
-
-/** Señales que, si fallan, obligan revisión independientemente del score */
-const CRITICAL_SIGNAL_IDS = new Set<string>([
-  SIGNAL_ID.MATERIALS_COMPATIBLE,
-  SIGNAL_ID.RAEE_EVIDENCE,
-]);
+import {
+  CRITICAL_SIGNAL_IDS,
+  computeResult,
+  computeTrustScore as computeTrustScoreEngine,
+  evaluateSignals,
+  hasRaeeMaterial,
+  parseLimitKg,
+  SIGNAL_ID,
+  WEIGHTS,
+  type EvaluationContext,
+} from '@/lib/trustScoreEngine';
 
 // ─── Tipo interno: datos cargados desde Supabase ─────────────
 
@@ -69,154 +54,44 @@ interface SessionData {
   }>;
   session_evidence: Array<{
     id: string;
+    public_url: string | null;
   }>;
-}
-
-// ─── Utilidades ──────────────────────────────────────────────
-
-/**
- * Extrae el límite numérico de KG del campo `limits` del punto
- * de acopio parseando texto como "Máximo 50 kg por visita."
- * Retorna `null` si no se encuentra un valor numérico.
- */
-function parseLimitKg(limitsText: string | null | undefined): number | null {
-  if (!limitsText) return null;
-  // Buscar el primer número que aparezca junto a "kg" en el texto
-  const match = limitsText.match(/(\d+(?:[.,]\d+)?)\s*kg/i);
-  if (!match) return null;
-  const value = parseFloat(match[1].replace(",", "."));
-  return isNaN(value) ? null : value;
 }
 
 /**
  * Cuenta sesiones previas completadas del usuario.
  * Excluye la sesión actual para no contarse a sí misma.
  */
-async function countCompletedSessions(
+async function getUserHistoryStats(
   userId: string,
   excludeSessionId: string
-): Promise<number> {
-  const { count, error } = await supabase
+): Promise<{ completedCount: number; cancelledCount: number }> {
+  const { count: completedCount, error: completedError } = await supabase
     .from("recycling_sessions")
     .select("id", { count: "exact", head: true })
     .eq("user_id", userId)
     .eq("status", "Completada" satisfies SessionStatus)
     .neq("id", excludeSessionId);
 
-  if (error) {
-    console.warn("[trustScore] Error al contar sesiones previas:", error.message);
-    return 0;
-  }
-  return count ?? 0;
-}
-
-// ─── Motor de evaluación de señales ─────────────────────────
-
-interface EvaluationContext {
-  materials:          SessionData["session_materials"];
-  evidenceCount:      number;
-  acceptedMaterials:  string[];
-  limitKg:            number;       // límite del punto (default 150)
-  totalKg:            number;
-  completedCount:     number;       // sesiones previas completadas
-  hasRaee:            boolean;
-}
-
-/**
- * Evalúa las cinco señales y retorna el array de TrustSignal.
- * La señal `raee-evidence` sólo se incluye cuando hay RAEE.
- */
-function evaluateSignals(ctx: EvaluationContext): TrustSignal[] {
-  const signals: TrustSignal[] = [];
-
-  // ── SEÑAL 1: materials-compatible (critical, 25 pts) ─────
-  const incompatible = ctx.materials.filter(
-    (m) => !ctx.acceptedMaterials.includes(m.material_type)
-  );
-  signals.push({
-    id: SIGNAL_ID.MATERIALS_COMPATIBLE,
-    label: "Materiales compatibles con el punto de acopio",
-    passed: incompatible.length === 0,
-    critical: true,
-  });
-
-  // ── SEÑAL 2: kg-range (25 pts) ──────────────────────────
-  const kg = ctx.totalKg;
-  const kgInRange = kg > 0 && kg <= ctx.limitKg;
-  const kgSuspicious = kg > 100; // sospechoso pero no crítico
-  signals.push({
-    id: SIGNAL_ID.KG_RANGE,
-    label: kgSuspicious
-      ? `Volumen declarado (${kg} kg) superior a 100 kg — requiere revisión`
-      : `Volumen dentro del rango permitido (≤ ${ctx.limitKg} kg)`,
-    passed: kgInRange && !kgSuspicious,
-    critical: false,
-  });
-
-  // ── SEÑAL 3: evidence-attached (20 pts) ─────────────────
-  signals.push({
-    id: SIGNAL_ID.EVIDENCE_ATTACHED,
-    label: "Al menos una evidencia fotográfica adjunta",
-    passed: ctx.evidenceCount >= 1,
-    critical: false,
-  });
-
-  // ── SEÑAL 4: user-history (20 pts) ──────────────────────
-  // Si es el primer reciclaje del usuario → peso neutro
-  // (se marca como "N/A" con passed=true para no restar)
-  const isFirstRecycling = ctx.completedCount === 0;
-  signals.push({
-    id: SIGNAL_ID.USER_HISTORY,
-    label: isFirstRecycling
-      ? "Primer reciclaje del usuario (historial neutro)"
-      : `Usuario con ${ctx.completedCount} sesión${ctx.completedCount > 1 ? "es" : ""} previa${ctx.completedCount > 1 ? "s" : ""} completada${ctx.completedCount > 1 ? "s" : ""}`,
-    passed: isFirstRecycling || ctx.completedCount >= 1,
-    critical: false,
-  });
-
-  // ── SEÑAL 5: raee-evidence (critical, 15 pts) ─────────
-  // Solo se evalúa cuando hay materiales RAEE
-  if (ctx.hasRaee) {
-    signals.push({
-      id: SIGNAL_ID.RAEE_EVIDENCE,
-      label: "Mínimo 2 evidencias adjuntas para materiales RAEE",
-      passed: ctx.evidenceCount >= 2,
-      critical: true,
-    });
+  if (completedError) {
+    console.warn("[trustScore] Error al contar sesiones completadas previas:", completedError.message);
   }
 
-  return signals;
-}
+  const { count: cancelledCount, error: cancelledError } = await supabase
+    .from("recycling_sessions")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("status", "Cancelada" satisfies SessionStatus)
+    .neq("id", excludeSessionId);
 
-/**
- * Calcula el score ponderado y determina level + requiresReview.
- */
-function computeResult(signals: TrustSignal[]): TrustScore {
-  // Solo contar señales que tienen peso definido
-  let totalWeight = 0;
-  let earnedWeight = 0;
-
-  for (const signal of signals) {
-    const weight = WEIGHTS[signal.id] ?? 0;
-    totalWeight += weight;
-    if (signal.passed) earnedWeight += weight;
+  if (cancelledError) {
+    console.warn("[trustScore] Error al contar sesiones canceladas previas:", cancelledError.message);
   }
 
-  const score =
-    totalWeight === 0 ? 100 : Math.round((earnedWeight / totalWeight) * 100);
-
-  let level: TrustLevel;
-  if (score >= 80) level = "Alta";
-  else if (score >= 50) level = "Media";
-  else level = "Baja";
-
-  const criticalFailed = signals.some(
-    (s) => CRITICAL_SIGNAL_IDS.has(s.id) && !s.passed
-  );
-
-  const requiresReview = criticalFailed || level === "Baja";
-
-  return { score, level, signals, requiresReview };
+  return {
+    completedCount: completedCount ?? 0,
+    cancelledCount: cancelledCount ?? 0,
+  };
 }
 
 // ─── Persistencia ────────────────────────────────────────────
@@ -322,7 +197,8 @@ export async function calculateAndSaveTrustScore(
         kg
       ),
       session_evidence (
-        id
+        id,
+        public_url
       )
     `)
     .eq("id", sessionId)
@@ -347,7 +223,7 @@ export async function calculateAndSaveTrustScore(
   const evidence  = session.session_evidence  ?? [];
 
   // ── 2. Contar sesiones completadas previas del usuario ───
-  const completedCount = await countCompletedSessions(
+  const { completedCount, cancelledCount } = await getUserHistoryStats(
     session.user_id,
     sessionId
   );
@@ -356,10 +232,9 @@ export async function calculateAndSaveTrustScore(
   const acceptedMaterials: string[] = point?.accepted_materials ?? [];
   const limitKg: number = parseLimitKg(point?.limits) ?? 150;
   const totalKg: number = Number(session.total_kg);
+  const materialsTotalKg: number = materials.reduce((sum, material) => sum + Number(material.kg), 0);
   const evidenceCount: number = evidence.length;
-  const hasRaee: boolean = materials.some(
-    (m) => m.material_type === ("Electrónicos (RAEE)" satisfies MaterialType)
-  );
+  const hasRaee: boolean = hasRaeeMaterial(materials);
 
   const ctx: EvaluationContext = {
     materials,
@@ -367,7 +242,9 @@ export async function calculateAndSaveTrustScore(
     acceptedMaterials,
     limitKg,
     totalKg,
+    materialsTotalKg,
     completedCount,
+    cancelledCount,
     hasRaee,
   };
 
@@ -453,6 +330,5 @@ export type { EvaluationContext };
  * @returns TrustScore calculado
  */
 export function computeTrustScore(ctx: EvaluationContext): TrustScore {
-  const signals = evaluateSignals(ctx);
-  return computeResult(signals);
+  return computeTrustScoreEngine(ctx);
 }

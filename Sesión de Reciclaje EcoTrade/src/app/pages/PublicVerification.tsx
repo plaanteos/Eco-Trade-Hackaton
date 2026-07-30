@@ -89,7 +89,7 @@ const PublicVerification: React.FC = () => {
               ? `Verificando transacción en Solana (${clusterLabel})…`
               : isValidOnChain
                 ? `Este recibo ha sido verificado y emitido en Solana blockchain (${clusterLabel}).`
-                : 'Este recibo está registrado, pero la transacción aún no aparece confirmada en Solana.'}
+                : 'Este recibo está registrado, pero esta vista no pudo confirmarlo automáticamente contra los RPC públicos disponibles.'}
           </p>
         </div>
       </header>
@@ -110,11 +110,11 @@ const PublicVerification: React.FC = () => {
                   ? '✓ FIRMA ON-CHAIN VÁLIDA'
                   : isLegacyReceipt
                     ? '✗ REGISTRO LEGADO NO VERIFICABLE'
-                    : '✗ FIRMA NO ENCONTRADA EN EXPLORADOR'}
+                    : '✗ NO SE PUDO VERIFICAR DESDE ESTA VISTA'}
               </div>
             )}
 
-            {!isLegacyReceipt && isValidOnChain && receipt?.explorerUrl && (
+            {!isLegacyReceipt && receipt?.explorerUrl && (
               <a
                 href={receipt.explorerUrl}
                 target="_blank"
@@ -134,8 +134,8 @@ const PublicVerification: React.FC = () => {
             <div>
               <h3 className="text-sm uppercase tracking-wider font-bold mb-2">Estado on-chain inconsistente</h3>
               <p className="text-sm text-[#1A1A1A]">
-                El recibo existe en la base de datos, pero la transacción no pudo verificarse de forma pública.
-                Debe reemitirse antes de considerarse válido como comprobante blockchain.
+                El recibo existe en la base de datos, pero esta página no logró validarlo automáticamente usando los RPC públicos del navegador.
+                Si el enlace de Solana Explorer abre correctamente, la transacción existe; en ese caso el problema es de verificación desde cliente, no necesariamente del recibo.
               </p>
             </div>
           </div>

@@ -149,7 +149,7 @@ const OperatorReviewQueue: React.FC = () => {
                   <tr key={item.id} className="border-b border-[#E8E6DD] hover:bg-[#F5F3ED] transition-colors">
                     <td className="p-4">
                       {item.trustScore !== undefined && (
-                        <TrustScore trustScore={{ score: item.trustScore, level: item.trustLevel as any, requiresReview: false, signals: [] }} compact />
+                        <TrustScore trustScore={{ score: item.trustScore, level: item.trustLevel as any, requiresReview: Boolean(item.requiresReview), signals: [] }} compact />
                       )}
                     </td>
                     <td className="p-4">

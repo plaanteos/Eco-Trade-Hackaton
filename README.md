@@ -43,7 +43,7 @@ User logs in with Google (no wallet, no seed phrase, no crypto knowledge)
         ↓
 Creates a recycling session — collection point, date, materials (kg), photo evidence
         ↓
-AI Trust Score evaluates the session automatically (5 signals)
+Trust Score heurístico evalúa la sesión automáticamente (5 señales)
         ↓
 Operator physically verifies the kg at the collection point
         ↓
@@ -59,7 +59,7 @@ Anyone can verify at /verificar/:id — no login required
 ## Key Features
 
 - **Google Login** — no crypto knowledge required, wallet derived automatically
-- **Trust Score (AI layer)** — detects anomalies before anything hits the chain
+- **Trust Score (heuristic risk layer)** — prioriza revisión antes de emitir on-chain
 - **On-chain Receipt** — SHA-256 hash recorded on Solana devnet, publicly verifiable
 - **Carbon Offset** — each session calculates CO₂ avoided using international factors
 - **Operator Panel** — review queue, kg verification, approve/reject sessions
@@ -199,8 +199,8 @@ to use this pre-existing frontend as a base, since:
 - **The entire backend was created from scratch during the hackathon:**
   - Supabase schema, RLS policies and storage configuration
   - Google OAuth authentication flow
-  - Trusted scoring engine (AI layer)
-  - Solana receipt issuance (serverless function `/api/emit-solan`)
+        - Trust scoring engine (heuristic risk layer)
+        - Solana receipt issuance (serverless function `/api/emit-solana`)
   - Carbon offset calculation module
   - Operator check queue and verification logic
   - Public verification page (`/verify/:id`)

@@ -636,55 +636,29 @@ export async function finalizarSesion(
 ): Promise<void> {
   const finalEcoCoins = Math.floor(verifiedKg / 10);
 
-  // ── 1. Actualizar sesión con datos verificados ────────────
+  // ── 1. Persistir datos verificados previos a la emisión ───
   const { data: sessionData, error: updateError } = await supabase
     .from("recycling_sessions")
     .update({
       verified_total_kg: verifiedKg,
       eco_coins: finalEcoCoins,
       operator_id: operatorId,
-      status: "Completada",
+      verified_by: operatorId,
     })
     .eq("id", sessionId)
-    .select("user_id, session_number")
+    .select("session_number")
     .single();
 
   if (updateError || !sessionData) {
     throw new Error(`[finalizarSesion] Error al actualizar sesión: ${updateError?.message}`);
   }
 
-  // ── 2. Actualizar balance en profiles (RPC para bypassar RLS) ─
-  const { error: profileError } = await supabase.rpc("increment_profile_stats", {
-    p_user_id: sessionData.user_id,
-    p_eco_coins: finalEcoCoins,
-    p_kg_recycled: verifiedKg,
-  });
-
-  if (profileError) {
-    console.warn("[finalizarSesion] increment_profile_stats RPC warning:", profileError.message);
-  }
-
-  // 3. Modulo de Huella de Carbono
+  // ── 2. Recalcular huella de carbono con kg verificados ─────
   await calculateAndSaveCarbonOffset(sessionId);
 
-  // ── 4. Emitir recibo Solana ───────────────────────────────
-  try {
-    const { emitirReciboSolana } = await import('@/lib/solana');
-    await emitirReciboSolana(sessionId);
-  } catch (err) {
-    console.warn(
-      `[finalizarSesion] Warning emitiendo recibo on-chain para sesión ${sessionData.session_number}:`,
-      err
-    );
-  }
-
-  // ── 5. Insertar en timeline ───────────────────────────────
-  await insertTimeline(
-    sessionId,
-    "Completada",
-    "Operador",
-    `Verificado: ${verifiedKg} kg → ${finalEcoCoins} ecoCoins`
-  );
+  // ── 3. Emitir recibo Solana y cerrar sesión en backend ────
+  const { emitirReciboSolana } = await import('@/lib/solana');
+  await emitirReciboSolana(sessionId);
 }
 
 // ────────────────────────────────────────────────────────────
@@ -763,6 +737,10 @@ export async function getPublicSession(sessionId: string): Promise<PublicSession
         verified,
         verified_kg
       ),
+      session_evidence (
+        public_url,
+        storage_path
+      ),
       solana_receipts (
         signature,
         cluster,
@@ -791,6 +769,7 @@ export async function getPublicSession(sessionId: string): Promise<PublicSession
   const cp = Array.isArray(d.collection_points) ? d.collection_points[0] : d.collection_points;
   const sr = Array.isArray(d.solana_receipts) ? d.solana_receipts[0] : d.solana_receipts;
   const cf = Array.isArray(d.carbon_footprint_offsets) ? d.carbon_footprint_offsets[0] : d.carbon_footprint_offsets;
+  const evidenceRows = Array.isArray(d.session_evidence) ? d.session_evidence : [];
 
   return {
     sessionNumber: d.session_number,
@@ -812,6 +791,9 @@ export async function getPublicSession(sessionId: string): Promise<PublicSession
         verifiedKg: m.verified_kg != null ? Number(m.verified_kg) : undefined,
       })
     ),
+    evidence: evidenceRows.map(
+      (e: { public_url: string | null; storage_path: string | null }) => e.public_url ?? e.storage_path ?? ''
+    ).filter(Boolean),
     evidenceHash: d.evidence_hash ?? undefined,
     solanaReceipt: sr ? mapSolanaReceipt(sr) : undefined,
     carbonOffset: cf ? {

@@ -19,6 +19,7 @@ export interface ReviewQueueItem {
   totalKg: number;
   trustLevel?: TrustLevel;
   trustScore?: number;
+  requiresReview?: boolean;
   status: SessionStatus;
   scheduledDate?: string;
   evidenceCount: number;
@@ -81,7 +82,7 @@ export async function getReviewQueue(filters?: ReviewFilters): Promise<ReviewQue
       total_kg,
       created_at,
       collection_points (name),
-      trust_scores (score, level),
+      trust_scores (score, level, requires_review),
       session_evidence (id),
       solana_receipts (signature)
     `)
@@ -105,6 +106,7 @@ export async function getReviewQueue(filters?: ReviewFilters): Promise<ReviewQue
       totalKg: Number(row.total_kg),
       trustLevel: ts?.level as TrustLevel | undefined,
       trustScore: ts?.score ? Number(ts.score) : undefined,
+      requiresReview: ts?.requires_review ?? undefined,
       status: row.status as SessionStatus,
       scheduledDate: row.scheduled_date || undefined,
       evidenceCount: Array.isArray(row.session_evidence) ? row.session_evidence.length : 0,
@@ -303,16 +305,7 @@ export async function aprobarSesion(
   }
 
   // d) Llama a finalizarSesion
-  // (finalizarSesion actualiza estado a 'Completada', suma ecoCoins, actualiza profile, y emite on-chain, e inserta a timeline temporalmente, pero nosotros queremos la inserción explícita de e)
   await finalizarSesion(sessionId, verifiedTotalKg, operatorId);
-
-  // e) Inserta timeline final
-  await insertTimeline(
-    sessionId,
-    'Completada',
-    'Operador',
-    `Aprobado por ${user?.email || operatorId}${operatorNote ? ' - Nota: ' + operatorNote : ''}`
-  );
 }
 
 // ────────────────────────────────────────────────────────────

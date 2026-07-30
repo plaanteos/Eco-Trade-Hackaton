@@ -17,6 +17,9 @@ import { useAuth } from '../context/AuthContext';
 import { uploadEvidence } from '@/lib/storage/uploadEvidence';
 import { emitirReciboSolana, isLegacyHashReceiptSignature } from '@/lib/solana';
 
+const RECEIPT_PENDING_WINDOW_MS = 60 * 1000;
+const RECEIPT_AUTO_REFRESH_MS = 8 * 1000;
+
 const SessionDetail: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -53,6 +56,23 @@ const SessionDetail: React.FC = () => {
     loadSession();
   }, [loadSession]);
 
+  useEffect(() => {
+    if (!session) return;
+
+    const isMissingReceipt = session.status === 'Completada' && !session.solanaReceipt;
+    if (!isMissingReceipt) return;
+
+    const updatedAtTime = session.updatedAt.getTime();
+    const isRecentCompletion = Date.now() - updatedAtTime <= RECEIPT_PENDING_WINDOW_MS;
+    if (!isRecentCompletion) return;
+
+    const intervalId = window.setInterval(() => {
+      void loadSession({ silent: true });
+    }, RECEIPT_AUTO_REFRESH_MS);
+
+    return () => window.clearInterval(intervalId);
+  }, [session, loadSession]);
+
   if (isLoading) {
     return (
       <div className="max-w-5xl mx-auto px-6 py-16 text-center">
@@ -84,6 +104,8 @@ const SessionDetail: React.FC = () => {
   const hasReceipt = Boolean(session.solanaReceipt);
   const isLegacyReceipt = Boolean(session.solanaReceipt && isLegacyHashReceiptSignature(session.solanaReceipt.signature));
   const isMissingReceipt = session.status === 'Completada' && !session.solanaReceipt;
+  const receiptPendingAgeMs = Date.now() - session.updatedAt.getTime();
+  const isReceiptRecentlyCompleting = isMissingReceipt && receiptPendingAgeMs <= RECEIPT_PENDING_WINDOW_MS;
 
   const canCancel = session.status === 'Borrador' || session.status === 'Programada';
 
@@ -344,8 +366,9 @@ const SessionDetail: React.FC = () => {
           {isMissingReceipt && (
             <Callout title="Recibo On-Chain" variant="warning">
               <p className="text-sm mb-4">
-                La sesión ya fue completada, pero el recibo en Solana aún no aparece.
-                Esto puede tardar unos segundos si se está confirmando la transacción.
+                {isReceiptRecentlyCompleting
+                  ? 'La sesión ya fue completada, pero el recibo en Solana todavía puede estar terminando de confirmarse. Esta vista se actualizará automáticamente durante el próximo minuto.'
+                  : 'La sesión figura como completada, pero todavía no tiene un recibo visible en Solana. A esta altura ya no parece un retraso normal de confirmación: falta emisión o la emisión falló y debe revisarla un operador.'}
               </p>
 
               {isOperador && (
@@ -375,6 +398,12 @@ const SessionDetail: React.FC = () => {
                 </div>
               )}
 
+              {!isOperador && !isReceiptRecentlyCompleting && (
+                <p className="text-xs text-[#4A4A4A] mb-3">
+                  Si este estado persiste, un operador debe reemitir el comprobante on-chain para que aparezca en esta sesión.
+                </p>
+              )}
+
               <EditorialButton
                 variant="outline"
                 size="md"
@@ -382,7 +411,7 @@ const SessionDetail: React.FC = () => {
                 disabled={isRefreshing}
                 className="w-full"
               >
-                {isRefreshing ? 'Actualizando…' : 'Actualizar'}
+                {isRefreshing ? 'Actualizando…' : 'Volver a consultar'}
               </EditorialButton>
             </Callout>
           )}

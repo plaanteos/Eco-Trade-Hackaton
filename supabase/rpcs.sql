@@ -275,5 +275,85 @@ COMMENT ON FUNCTION public.upsert_carbon_offset IS
 
 
 -- ──────────────────────────────────────────────────────────
+-- RPC 6: complete_session_after_receipt
+--   Cierra la sesión de forma idempotente después de una
+--   emisión on-chain confirmada.
+-- ──────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION public.complete_session_after_receipt(
+  p_session_id   UUID,
+  p_operator_id  UUID,
+  p_verified_by  TEXT,
+  p_verified_kg  DECIMAL,
+  p_eco_coins    INTEGER,
+  p_note         TEXT DEFAULT NULL
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_user_id UUID;
+  v_status  TEXT;
+BEGIN
+  IF NOT (public.is_operator() OR auth.role() = 'service_role') THEN
+    RAISE EXCEPTION 'Solo operadores autenticados o service_role pueden completar sesiones';
+  END IF;
+
+  SELECT rs.user_id, rs.status
+    INTO v_user_id, v_status
+  FROM public.recycling_sessions rs
+  WHERE rs.id = p_session_id
+  LIMIT 1;
+
+  IF v_user_id IS NULL THEN
+    RAISE EXCEPTION 'Sesión no encontrada para completar: %', p_session_id;
+  END IF;
+
+  IF v_status = 'Completada' THEN
+    UPDATE public.recycling_sessions
+    SET
+      verified_total_kg = p_verified_kg,
+      eco_coins         = p_eco_coins,
+      operator_id       = COALESCE(operator_id, p_operator_id),
+      verified_by       = COALESCE(NULLIF(verified_by, ''), p_verified_by),
+      updated_at        = NOW()
+    WHERE id = p_session_id;
+
+    RETURN;
+  END IF;
+
+  UPDATE public.recycling_sessions
+  SET
+    status            = 'Completada',
+    verified_total_kg = p_verified_kg,
+    eco_coins         = p_eco_coins,
+    operator_id       = p_operator_id,
+    verified_by       = p_verified_by,
+    updated_at        = NOW()
+  WHERE id = p_session_id;
+
+  UPDATE public.profiles
+  SET
+    eco_coins_balance = eco_coins_balance + p_eco_coins,
+    total_kg_recycled = total_kg_recycled + p_verified_kg,
+    updated_at        = NOW()
+  WHERE id = v_user_id;
+
+  INSERT INTO public.session_timeline (session_id, status, actor, note)
+  VALUES (
+    p_session_id,
+    'Completada',
+    'Operador',
+    COALESCE(p_note, format('Verificado: %s kg -> %s ecoCoins', p_verified_kg, p_eco_coins))
+  );
+END;
+$$;
+
+COMMENT ON FUNCTION public.complete_session_after_receipt IS
+  'Completa una sesión de forma idempotente después de un recibo Solana confirmado';
+
+
+-- ──────────────────────────────────────────────────────────
 -- FIN DE RPCs
 -- ──────────────────────────────────────────────────────────

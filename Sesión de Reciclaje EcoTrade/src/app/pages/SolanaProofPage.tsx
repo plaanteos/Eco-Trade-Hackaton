@@ -142,7 +142,7 @@ const SolanaProofPage: React.FC = () => {
           badge: isCheckingReceipt ? 'Checking' : 'Invalid',
           summary: isCheckingReceipt
             ? 'Validando la firma contra el cluster configurado.'
-            : 'La firma almacenada no pudo validarse públicamente en Solana.',
+            : 'La firma almacenada no pudo validarse automáticamente contra los RPC públicos disponibles.',
           proofLabel: 'Firma no verificable',
         };
 
@@ -252,7 +252,7 @@ const SolanaProofPage: React.FC = () => {
                 {copied ? <Check className="w-4 h-4 text-[#4ADE80]" /> : <Copy className="w-4 h-4" />}
                 {copied ? 'Copiado' : 'Copiar'}
               </button>
-              {isValidOnChain && (
+              {receipt.explorerUrl && (
                 <a
                   href={receipt.explorerUrl}
                   target="_blank"
@@ -280,7 +280,7 @@ const SolanaProofPage: React.FC = () => {
                     ? 'La firma almacenada pertenece a un registro heredado y no constituye una transacción pública verificable en Solana.'
                     : isCheckingReceipt
                       ? 'Se está verificando la firma contra el cluster configurado antes de exponerla como comprobante válido.'
-                      : 'La firma almacenada no pudo confirmarse públicamente en Solana y debe revisarse o reemitirse.'}
+                      : 'La firma almacenada no pudo confirmarse automáticamente desde esta vista usando los RPC públicos disponibles. Si el enlace de Explorer abre correctamente, la transacción existe y el problema es de verificación desde cliente.'}
                 </p>
                 <div className="text-xs text-[#E8E6DD] space-y-1">
                   <div className="flex gap-2">
@@ -289,7 +289,7 @@ const SolanaProofPage: React.FC = () => {
                   </div>
                   <div className="flex gap-2">
                     <span className="text-[#F59E0B] w-28 flex-shrink-0">Acción:</span>
-                    <span>{isLegacyReceipt ? 'Reemitir recibo on-chain' : 'Revisar RPC o reemitir recibo'}</span>
+                    <span>{isLegacyReceipt ? 'Reemitir recibo on-chain' : 'Abrir Explorer, confirmar cluster y solo reemitir si la tx no existe'}</span>
                   </div>
                 </div>
               </div>

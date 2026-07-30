@@ -34,6 +34,13 @@ No existe un mecanismo perfecto para garantizar que una imagen no fue generada o
 
 ## Modelo de Trust Score
 
+Estado actual de implementación:
+
+- la versión vigente es heurística y determinista
+- no usa modelos de IA ni clasificación predictiva
+- funciona como capa explicable de priorización de riesgo
+- cualquier evolución futura con IA debe considerarse una v2, no asumirse en la versión actual
+
 ### Propósito
 El Trust Score evalúa el nivel de confianza de una sesión de reciclaje antes de su validación final. Su función es:
 

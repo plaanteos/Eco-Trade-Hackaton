@@ -43,19 +43,64 @@ async function resolveTransactionVerification(
   return { valid: isConfirmed, data: { confirmationStatus: status.confirmationStatus } };
 }
 
-function getRpcUrlForCluster(cluster: SolanaReceipt['cluster']): string {
-  // Si el usuario configuró un RPC y coincide con su red actual, usarlo.
-  if (CONFIG.SOLANA_NETWORK === cluster && CONFIG.SOLANA_RPC_URL) return CONFIG.SOLANA_RPC_URL;
+function getRpcUrlsForCluster(cluster: SolanaReceipt['cluster']): string[] {
+  const urls: string[] = [];
+
+  if (CONFIG.SOLANA_NETWORK === cluster && CONFIG.SOLANA_RPC_URL) {
+    urls.push(CONFIG.SOLANA_RPC_URL);
+  }
 
   switch (cluster) {
     case 'devnet':
-      return 'https://api.devnet.solana.com';
+      urls.push('https://api.devnet.solana.com');
+      break;
     case 'testnet':
-      return 'https://api.testnet.solana.com';
+      urls.push('https://api.testnet.solana.com');
+      break;
     case 'mainnet-beta':
+      urls.push('https://api.mainnet-beta.solana.com');
+      urls.push('https://solana.public-rpc.com');
+      break;
     default:
-      return 'https://api.mainnet-beta.solana.com';
+      urls.push('https://api.mainnet-beta.solana.com');
   }
+
+  return [...new Set(urls)];
+}
+
+async function verifyAgainstRpcUrls(
+  signature: string,
+  cluster: SolanaReceipt['cluster']
+): Promise<{ valid: boolean; data: any }> {
+  const rpcUrls = getRpcUrlsForCluster(cluster);
+  let lastError: unknown = null;
+
+  for (const rpcUrl of rpcUrls) {
+    try {
+      const connection = new Connection(rpcUrl, 'confirmed');
+      const result = await resolveTransactionVerification(connection, signature);
+      if (result.valid) {
+        return {
+          valid: true,
+          data: {
+            ...(typeof result.data === 'object' && result.data !== null ? result.data : { result: result.data }),
+            rpcUrl,
+          },
+        };
+      }
+    } catch (error) {
+      lastError = error;
+      console.warn(`[Solana] RPC ${rpcUrl} no pudo verificar la firma ${signature}:`, error);
+    }
+  }
+
+  return {
+    valid: false,
+    data: {
+      rpcUrls,
+      error: lastError instanceof Error ? lastError.message : (lastError ?? null),
+    },
+  };
 }
 
 // Funciones legacy de generacion de keypair local movidas a api/emit-solana.ts
@@ -65,9 +110,20 @@ function getRpcUrlForCluster(cluster: SolanaReceipt['cluster']): string {
  * a través del SPL Memo Program.
  */
 export async function emitirReciboSolana(sessionId: string): Promise<SolanaReceipt> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    throw new Error('Debes iniciar sesión como operador para emitir recibos');
+  }
+
   const res = await fetch('/api/emit-solana', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
     body: JSON.stringify({ sessionId }),
   });
 
@@ -103,10 +159,7 @@ export async function verificarReciboPublico(signature: string): Promise<{valid:
     // Por defecto intentamos en la red configurada. Si la verificación pública
     // necesita otra red (según el recibo), el caller debe pasar el cluster.
     const cluster = (CONFIG.SOLANA_NETWORK as SolanaReceipt['cluster']) || 'devnet';
-    const rpcUrl = getRpcUrlForCluster(cluster);
-    const connection = new Connection(rpcUrl, 'confirmed');
-
-    return await resolveTransactionVerification(connection, signature);
+    return await verifyAgainstRpcUrls(signature, cluster);
   } catch (err) {
     console.error('[Solana] Error verificando recibo:', err);
     return { valid: false, data: null };
@@ -121,9 +174,7 @@ export async function verificarReciboPublicoEnCluster(
   cluster: SolanaReceipt['cluster']
 ): Promise<{ valid: boolean; data: any }> {
   try {
-    const rpcUrl = getRpcUrlForCluster(cluster);
-    const connection = new Connection(rpcUrl, 'confirmed');
-    return await resolveTransactionVerification(connection, signature);
+    return await verifyAgainstRpcUrls(signature, cluster);
   } catch (err) {
     console.error('[Solana] Error verificando recibo (cluster):', err);
     return { valid: false, data: null };
@@ -155,14 +206,13 @@ export async function getReciboBySession(sessionId: string): Promise<SolanaRecei
 }
 
 /**
- * Busca recibos con status 'pending' que ya expiró el retry_at y los reintenta.
+ * Busca recibos con status 'pending' y los reintenta.
  */
 export async function retryPendingRecibos(): Promise<void> {
   const { data: pendingReceipts, error } = await supabase
     .from('solana_receipts')
     .select('session_id')
-    .eq('status', 'pending')
-    .lte('retry_at', new Date().toISOString());
+    .eq('status', 'pending');
 
   if (error || !pendingReceipts || pendingReceipts.length === 0) {
     return;
