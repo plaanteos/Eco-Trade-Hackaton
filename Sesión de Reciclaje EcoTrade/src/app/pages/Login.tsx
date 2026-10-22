@@ -43,6 +43,7 @@ const Login: React.FC = () => {
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [mode, setMode] = useState<'menu' | 'operador' | 'acopio'>('menu');
   const [opLoading, setOpLoading] = useState(false);
   const [callbackLoading, setCallbackLoading] = useState(false);
   const [callbackError, setCallbackError] = useState<string | null>(null);
@@ -131,7 +132,7 @@ const Login: React.FC = () => {
     setOpLoading(true);
     const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
     if (signInError) {
-      alert("Error ingresando como operador: " + signInError.message + "\nSi no tienes cuenta, crea una o ve a Supabase.");
+      alert(`Error ingresando como ${mode === 'acopio' ? 'punto de acopio' : 'operador'}: ${signInError.message}`);
       setOpLoading(false);
       return;
     }
@@ -229,6 +230,8 @@ const Login: React.FC = () => {
             </div>
           )}
 
+          {mode === 'menu' && (
+          <>
           {/* Botón principal Google */}
           <button
             id="btn-google-login"
@@ -273,21 +276,51 @@ const Login: React.FC = () => {
             )}
           </button>
 
-          {/* Separador */}
-          <div className="flex items-center gap-4 my-6">
-            <div className="flex-1 h-px" style={{ backgroundColor: '#E8E6DD' }} />
-            <span className="text-[10px] uppercase tracking-wider font-bold" style={{ color: '#9A9A8A' }}>
-              o ingresar como operador
-            </span>
-            <div className="flex-1 h-px" style={{ backgroundColor: '#E8E6DD' }} />
+          <div className="mt-4 space-y-4">
+            {([
+              { key: 'operador', label: 'Iniciar sesión como operador' },
+              { key: 'acopio', label: 'Iniciar sesión como punto de acopio' },
+            ] as const).map(opt => (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => { setMode(opt.key); setEmail(''); setPassword(''); }}
+                className="w-full py-4 px-6 transition-all duration-150 hover:bg-[#1A1A1A] hover:text-[#F5F3ED]"
+                style={{
+                  backgroundColor: 'transparent',
+                  color: '#1A1A1A',
+                  border: '2px solid #1A1A1A',
+                  fontSize: '0.9rem',
+                  fontWeight: 600,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
           </div>
+          </>
+          )}
 
-          {/* Formulario de Operador */}
+          {mode !== 'menu' && (
+          <>
+          <button
+            type="button"
+            onClick={() => setMode('menu')}
+            className="text-xs uppercase tracking-wider mb-6 text-[#4A4A4A] hover:text-[#2D5016]"
+          >
+            ← Volver
+          </button>
+          <h3 className="text-lg mb-4" style={{ fontFamily: 'var(--font-serif)' }}>
+            {mode === 'operador' ? 'Acceso de operador' : 'Acceso de punto de acopio'}
+          </h3>
+
           <form onSubmit={handleOperatorLogin} className="space-y-4">
             <div>
               <input
                 type="email"
-                placeholder="Correo (operador / centro de acopio)"
+                placeholder={mode === 'operador' ? 'Correo de operador' : 'Correo del punto de acopio'}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -332,11 +365,12 @@ const Login: React.FC = () => {
                 }
               }}
             >
-              {opLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'INGRESAR CON CORREO'}
+              {opLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'INGRESAR'}
             </button>
           </form>
 
           {/* ── Credenciales de Operador (Demo Hackathon) ── */}
+          {mode === 'operador' && (
           <div className="mt-6 p-4" style={{ backgroundColor: '#F9F9F9', border: '1px dashed #9A9A8A' }}>
             <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: '#1A1A1A' }}>
               Credenciales de Operador (Demo Hackathon)
@@ -350,6 +384,9 @@ const Login: React.FC = () => {
               </p>
             </div>
           </div>
+          )}
+          </>
+          )}
         </div>
 
         {/* ── Footer ──────────────────────────────────────── */}
