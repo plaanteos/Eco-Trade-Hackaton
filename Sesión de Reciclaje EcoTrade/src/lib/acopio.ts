@@ -1,0 +1,82 @@
+import { supabase } from '@/lib/supabase/client';
+import type { MaterialType } from '@/app/types';
+
+export const ALL_MATERIALS: MaterialType[] = [
+  'Plástico',
+  'Vidrio',
+  'Papel y cartón',
+  'Metal',
+  'Electrónicos (RAEE)',
+];
+
+export interface AcopioCenter {
+  id: string;
+  name: string;
+  address: string;
+  schedule: string;
+  acceptedMaterials: MaterialType[];
+  instructions: string;
+  limits: string;
+  isActive: boolean;
+}
+
+export type AcopioCenterInput = Omit<AcopioCenter, 'id'>;
+
+interface Row {
+  id: string;
+  name: string;
+  address: string;
+  schedule: string;
+  accepted_materials: MaterialType[] | null;
+  instructions: string | null;
+  limits: string | null;
+  is_active: boolean;
+}
+
+const map = (r: Row): AcopioCenter => ({
+  id: r.id,
+  name: r.name,
+  address: r.address,
+  schedule: r.schedule,
+  acceptedMaterials: r.accepted_materials ?? [],
+  instructions: r.instructions ?? '',
+  limits: r.limits ?? '',
+  isActive: r.is_active,
+});
+
+const toRow = (c: AcopioCenterInput) => ({
+  name: c.name.trim(),
+  address: c.address.trim(),
+  schedule: c.schedule.trim(),
+  accepted_materials: c.acceptedMaterials,
+  instructions: c.instructions.trim() || null,
+  limits: c.limits.trim() || null,
+  is_active: c.isActive,
+});
+
+export async function listMyCenters(ownerId: string): Promise<AcopioCenter[]> {
+  const { data, error } = await supabase
+    .from('collection_points')
+    .select('id, name, address, schedule, accepted_materials, instructions, limits, is_active')
+    .eq('owner_id', ownerId)
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data as Row[]).map(map);
+}
+
+export async function createCenter(ownerId: string, input: AcopioCenterInput): Promise<void> {
+  const { error } = await supabase
+    .from('collection_points')
+    .insert({ ...toRow(input), owner_id: ownerId });
+  if (error) throw new Error(error.message);
+}
+
+export async function updateCenter(id: string, input: AcopioCenterInput): Promise<void> {
+  const { error } = await supabase.from('collection_points').update(toRow(input)).eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteCenter(id: string): Promise<void> {
+  const { error } = await supabase.from('collection_points').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+}

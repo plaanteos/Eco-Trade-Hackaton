@@ -113,6 +113,8 @@ const Login: React.FC = () => {
 
     if (role === 'Operador') {
       navigate('/operador/cola', { replace: true });
+    } else if (role === 'Centro de Acopio') {
+      navigate('/acopio', { replace: true });
     } else if (from && from !== '/login') {
       navigate(from, { replace: true });
     } else {
@@ -133,9 +135,8 @@ const Login: React.FC = () => {
       setOpLoading(false);
       return;
     }
-    // Redirigir de inmediato al dashboard de operador.
-    // El rol se actualizará cuando syncSession termine.
-    navigate('/operador/cola', { replace: true });
+    // La redirección según el rol la hace el efecto de arriba cuando
+    // syncSession carga el perfil.
     setOpLoading(false);
   };
 
@@ -286,7 +287,7 @@ const Login: React.FC = () => {
             <div>
               <input
                 type="email"
-                placeholder="Correo de operador"
+                placeholder="Correo (operador / centro de acopio)"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -331,7 +332,7 @@ const Login: React.FC = () => {
                 }
               }}
             >
-              {opLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'CONTINUAR COMO OPERADOR'}
+              {opLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'INGRESAR CON CORREO'}
             </button>
           </form>
 

@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   email              TEXT           NOT NULL,
   full_name          TEXT,
   role               TEXT           NOT NULL DEFAULT 'Usuario'
-                                    CHECK (role IN ('Usuario', 'Operador')),
+                                    CHECK (role IN ('Usuario', 'Operador', 'Centro de Acopio')),
   wallet_address     TEXT,                        -- Dirección Solana derivada por Alchemy
   eco_coins_balance  INTEGER        NOT NULL DEFAULT 0
                                     CHECK (eco_coins_balance >= 0),

@@ -10,6 +10,7 @@ const Root: React.FC = () => {
   const { user, logout, isAuthenticated, isLoading } = useAuth();
 
   const isOperador = user?.role === 'Operador';
+  const isAcopio = user?.role === 'Centro de Acopio';
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -20,8 +21,12 @@ const Root: React.FC = () => {
     } else if (isOperador && location.pathname === '/') {
       // Redirect operador to their dashboard
       navigate('/operador/cola');
+    } else if (isAcopio && !location.pathname.startsWith('/acopio')) {
+      navigate('/acopio', { replace: true });
+    } else if (!isAcopio && location.pathname.startsWith('/acopio')) {
+      navigate('/', { replace: true });
     }
-  }, [isAuthenticated, isLoading, navigate, isOperador, location.pathname]);
+  }, [isAuthenticated, isLoading, navigate, isOperador, isAcopio, location.pathname]);
 
   const handleLogout = async () => {
     await logout(); // logout() in AuthContext already navigates to /login
@@ -52,7 +57,14 @@ const Root: React.FC = () => {
 
               <div className="flex items-center gap-6">
                 <nav className="flex items-center gap-6">
-                  {isOperador ? (
+                  {isAcopio ? (
+                    <Link
+                      to="/acopio"
+                      className="text-sm uppercase tracking-wider text-[#2D5016] font-semibold border-b-2 border-[#2D5016] pb-1"
+                    >
+                      Mis Centros
+                    </Link>
+                  ) : isOperador ? (
                     /* Operador navigation */
                     <>
                       <Link 
@@ -98,7 +110,7 @@ const Root: React.FC = () => {
                 {/* User menu */}
                 <div className="flex items-center gap-4 ml-6 pl-6 border-l-2 border-[#E8E6DD]">
                   <div className="flex items-center gap-2">
-                    {isOperador ? (
+                    {isOperador || isAcopio ? (
                       <Briefcase className="w-5 h-5 text-[#B85C00]" />
                     ) : (
                       <User className="w-5 h-5 text-[#2D5016]" />

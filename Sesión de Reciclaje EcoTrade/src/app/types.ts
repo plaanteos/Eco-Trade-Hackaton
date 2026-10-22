@@ -15,7 +15,7 @@ export type SessionStatus =
   | 'Completada' 
   | 'Cancelada';
 
-export type UserRole = 'Usuario' | 'Operador';
+export type UserRole = 'Usuario' | 'Operador' | 'Centro de Acopio';
 
 export type TrustLevel = 'Alta' | 'Media' | 'Baja';
 

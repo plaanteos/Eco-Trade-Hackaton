@@ -23,6 +23,7 @@ import PublicVerification from "./pages/PublicVerification";
 import OperatorReviewQueue from "./pages/OperatorReviewQueue";
 import OperatorReviewDetail from "./pages/OperatorReviewDetail";
 import SolanaProofPage from "./pages/SolanaProofPage";
+import AcopioPanel from "./pages/AcopioPanel";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 
@@ -57,6 +58,8 @@ export const router = createBrowserRouter([
           { path: "operador/verificar/:id", Component: OperatorVerification },
           { path: "operador/cola", Component: OperatorReviewQueue },
           { path: "operador/revisar/:id", Component: OperatorReviewDetail },
+          // Panel de Centro de Acopio
+          { path: "acopio", Component: AcopioPanel },
           { path: "*", Component: NotFound },
         ],
       },
