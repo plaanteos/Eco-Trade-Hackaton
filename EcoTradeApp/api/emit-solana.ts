@@ -1,1 +1,1 @@
-export { default } from '../../shared/emit-solana-handler.js';
+export { default } from './_lib/emit-solana-handler.js';
