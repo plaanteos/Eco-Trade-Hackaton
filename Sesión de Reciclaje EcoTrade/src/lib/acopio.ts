@@ -9,6 +9,29 @@ export const ALL_MATERIALS: MaterialType[] = [
   'Electrónicos (RAEE)',
 ];
 
+export const DAYS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'] as const;
+
+export const TIME_OPTIONS: string[] = Array.from({ length: 48 }, (_, i) => {
+  const h = String(Math.floor(i / 2)).padStart(2, '0');
+  return `${h}:${i % 2 ? '30' : '00'}`;
+});
+
+export type DaySchedule = Record<string, { from: string; to: string }>;
+
+// Formato guardado: "Lunes 08:00–18:00 | Martes 09:00–14:00"
+export function parseSchedule(text: string): DaySchedule {
+  const out: DaySchedule = {};
+  for (const part of text.split('|')) {
+    const m = part.trim().match(/^(\S+) (\d{2}:\d{2})–(\d{2}:\d{2})$/);
+    if (m && (DAYS as readonly string[]).includes(m[1])) out[m[1]] = { from: m[2], to: m[3] };
+  }
+  return out;
+}
+
+export function serializeSchedule(s: DaySchedule): string {
+  return DAYS.filter((d) => s[d]).map((d) => `${d} ${s[d].from}–${s[d].to}`).join(' | ');
+}
+
 export interface AcopioCenter {
   id: string;
   name: string;

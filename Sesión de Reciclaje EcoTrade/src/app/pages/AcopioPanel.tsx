@@ -3,6 +3,11 @@ import { Loader2, MapPin, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
   ALL_MATERIALS,
+  DAYS,
+  TIME_OPTIONS,
+  parseSchedule,
+  serializeSchedule,
+  type DaySchedule,
   createCenter,
   deleteCenter,
   listMyCenters,
@@ -75,6 +80,15 @@ const AcopioPanel: React.FC = () => {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form || !user) return;
+    const sched = parseSchedule(form.schedule);
+    if (Object.keys(sched).length === 0) {
+      setError('Selecciona al menos un día de atención.');
+      return;
+    }
+    if (Object.values(sched).some((s) => s.from >= s.to)) {
+      setError('En cada día, la hora de cierre debe ser posterior a la de apertura.');
+      return;
+    }
     if (form.acceptedMaterials.length === 0) {
       setError('Selecciona al menos un material aceptado.');
       return;
@@ -156,8 +170,52 @@ const AcopioPanel: React.FC = () => {
             <input required className={inputCls} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
           </div>
           <div>
-            <label className={labelCls}>Horario</label>
-            <input required className={inputCls} placeholder="Lunes a Viernes 08:00–18:00" value={form.schedule} onChange={(e) => setForm({ ...form, schedule: e.target.value })} />
+            <span className={labelCls}>Horario de atención</span>
+            <div className="border-2 border-[#1A1A1A] bg-white divide-y divide-[#E8E6DD]">
+              {DAYS.map((d) => {
+                const sched = parseSchedule(form.schedule);
+                const day = sched[d];
+                const update = (next: DaySchedule) => setForm({ ...form, schedule: serializeSchedule(next) });
+                return (
+                  <div key={d} className="flex items-center gap-3 px-3 py-2 text-sm">
+                    <label className="flex items-center gap-2 w-36">
+                      <input
+                        type="checkbox"
+                        checked={!!day}
+                        onChange={(e) => {
+                          const next = { ...sched };
+                          if (e.target.checked) next[d] = { from: '08:00', to: '18:00' };
+                          else delete next[d];
+                          update(next);
+                        }}
+                      />
+                      {d}
+                    </label>
+                    {day ? (
+                      <>
+                        <select
+                          className="border border-[#1A1A1A] px-2 py-1"
+                          value={day.from}
+                          onChange={(e) => update({ ...sched, [d]: { ...day, from: e.target.value } })}
+                        >
+                          {TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                        <span>a</span>
+                        <select
+                          className="border border-[#1A1A1A] px-2 py-1"
+                          value={day.to}
+                          onChange={(e) => update({ ...sched, [d]: { ...day, to: e.target.value } })}
+                        >
+                          {TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                      </>
+                    ) : (
+                      <span className="text-[#9A9A8A]">Cerrado</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
           <div>
             <span className={labelCls}>Materiales aceptados</span>
