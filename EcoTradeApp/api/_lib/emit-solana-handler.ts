@@ -201,14 +201,15 @@ async function ensureFunds(
   pubkey: PublicKey,
   cluster: SolanaCluster
 ): Promise<void> {
-  const minLamports = Number(getFirstEnv('SOLANA_MIN_BALANCE_LAMPORTS') ?? 5_000_000);
+  const defaultMin = cluster === 'mainnet-beta' ? 1_000_000 : 5_000_000;
+  const minLamports = Number(getFirstEnv('SOLANA_MIN_BALANCE_LAMPORTS') ?? defaultMin);
   const balance = await connection.getBalance(pubkey, 'confirmed');
 
   if (balance >= minLamports) return;
 
   if (cluster !== 'devnet' && cluster !== 'testnet') {
     throw new Error(
-      `Wallet sin saldo para fees en ${cluster}. Fondea ${pubkey.toBase58()} y reintenta.`
+      `Wallet sin saldo para fees en ${cluster} (balance=${balance} lamports). Fondea ${pubkey.toBase58()} y reintenta.`
     );
   }
 
@@ -383,7 +384,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const connection = new Connection(RPC_URL, 'confirmed');
     const keypair = getOperatorKeypair();
 
-    if (CLUSTER === 'devnet' || CLUSTER === 'testnet') {
+    if (CLUSTER === 'devnet' || CLUSTER === 'testnet' || CLUSTER === 'mainnet-beta') {
       await ensureFunds(connection, keypair.publicKey, CLUSTER);
     }
 
